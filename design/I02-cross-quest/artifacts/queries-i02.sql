@@ -4,16 +4,20 @@
 -- Executable sketches against the fully seeded database (I01 schema+seed,
 -- then schema-i02 + seed-i02), in the proven temp-table style: every family
 -- materializes its result into a temp table, then asserts non-emptiness /
--- zero-violations via CHECK-constrained temp tables (AC3). Family M1's
--- near-dup leg is a DESIGNATED SLOT: the SQL shape is pinned here but the
--- embedding tables land in ENTRY 3 (R-036) — match_kind='near_dup' rows in
--- merge_events carry the slot's fixture data meanwhile.
+-- zero-violations via CHECK-constrained temp tables (AC3). Amended
+-- 2026-11-22 per the operator rulings: M1 is now the HUB VIEW's query
+-- surface (DR-16 — the hub is derived, no merge workflow exists), and M3
+-- carries the FINGERPRINT drift inventory (DR-17 — staleness detected, not
+-- prevented). Near-dup remains a DESIGNATED SLOT: the SQL shape for
+-- embedding-scored candidates is pinned here but the embedding tables land
+-- in ENTRY 3 (R-036).
 --
---   M1  merge-candidate generation   (exact leg live; near-dup leg slotted)
---   M2  lineage / graft path         (claim -> origin quest chain + corpus)
---   M3  report version chain + standing pointer + stale inventory + imports
---   M4  visibility check             (what a given viewer may read)
---   X1  cross-consistency            (archive drift, closure, mass snapshots)
+--   M1  hub view queries            (exact-text reuse lookup + type
+--                                    divergence surfacing — the tripwire data)
+--   M2  lineage / graft path        (claim -> origin quest chain + corpus)
+--   M3  report version chain + pinned fingerprints + stale inventory
+--   M4  visibility check            (what a given viewer may read)
+--   X1  cross-consistency           (archive recording, closure, mass snapshots)
 --   B1  the citation binding pass, run as the designed algorithm (fixture)
 -- ============================================================================
 
@@ -22,66 +26,67 @@
 \set QA 'b0000000-0000-4000-8000-000000000001'
 \set QD 'b0000000-0000-4000-8000-000000000010'
 \set D1 'f0000000-0000-4000-8000-000000000101'
-\set CC1 '80000000-0000-4000-8000-000000000001'
 \set RV2 'aa000000-0000-4000-8000-0000000000b2'
 \set SYN2 'd0000000-0000-4000-8000-000000000015'
 
-\echo '=== M1: merge-candidate generation (exactMatch leg live) ==='
--- Leg A — ADOPT candidates: a quest claim whose canonical text exactly
--- matches one of the user's canonical claims, with NO active merge event
--- between them. This is the exactMatch propose-only feed: reversal REOPENS
--- candidacy (k5's reversed event leaves no active lifecycle).
--- Leg B — MINT candidates: same-user claims in >= 2 distinct quests share a
--- canonical text that has NO canonical claim yet: propose minting one.
-CREATE TEMP TABLE m1_candidates AS
-WITH active_events AS (
-  SELECT quest_claim_id, canonical_claim_id
-  FROM merge_events
-  WHERE state IN ('candidate', 'proposed', 'approved')
-), adopt AS (
-  SELECT c.user_id,
-         'adopt'::text        AS leg,
-         c.id                 AS quest_claim_id,
-         c.quest_id,
-         cc.id                AS canonical_claim_id,
-         NULL::uuid           AS peer_claim_id
-  FROM claims c
-  JOIN canonical_claims cc ON cc.user_id = c.user_id
-                          AND cc.canonical_text = c.canonical_text
-  LEFT JOIN active_events ae ON ae.quest_claim_id = c.id
-                           AND ae.canonical_claim_id = cc.id
-  WHERE ae.quest_claim_id IS NULL
-), mint AS (
-  SELECT a.user_id,
-         'mint'::text        AS leg,
-         a.id                AS quest_claim_id,
-         a.quest_id,
-         NULL::uuid          AS canonical_claim_id,
-         b.id                AS peer_claim_id
-  FROM claims a
-  JOIN claims b ON b.user_id = a.user_id
-               AND b.canonical_text = a.canonical_text
-               AND b.quest_id <> a.quest_id
-               AND b.id > a.id
-  WHERE NOT EXISTS (SELECT 1 FROM canonical_claims cc
-                    WHERE cc.user_id = a.user_id
-                      AND cc.canonical_text = a.canonical_text)
-)
-SELECT * FROM adopt UNION ALL SELECT * FROM mint;
+\echo '=== M1: the hub view — exact-text reuse lookup + type-divergence surfacing ==='
+-- The hub is a DERIVED view (DR-16): identity = (user_id, canonical_text,
+-- terminal_type); exact canonical-text derivation (DR-02 option A, ruled);
+-- nothing adopted, nothing refused.
+--
+-- Leg 1 — REUSE LOOKUP: what does a given quest already know? For each
+-- claim of the focus quest, the hub entries sharing its canonical text that
+-- hold members in OTHER quests (prior derivations of the same line).
+CREATE TEMP TABLE m1_reuse AS
+SELECT c.id            AS quest_claim_id,
+       left(v.canonical_text, 52) AS canonical_text_prefix,
+       v.terminal_type,
+       v.member_claim_ids,
+       v.quest_count,
+       (SELECT count(*) FROM unnest(v.member_claim_ids) m
+          JOIN claims c2 ON c2.id = m AND c2.quest_id <> c.quest_id) AS prior_members
+FROM claims c
+JOIN v_canonical_claims v
+  ON v.user_id = c.user_id
+ AND v.canonical_text = c.canonical_text
+WHERE c.quest_id = :'QD'
+  AND EXISTS (SELECT 1 FROM claims c2
+              WHERE c2.user_id = c.user_id
+                AND c2.canonical_text = c.canonical_text
+                AND c2.quest_id <> c.quest_id);
 
-SELECT * FROM m1_candidates ORDER BY leg, quest_claim_id;
+SELECT * FROM m1_reuse ORDER BY quest_claim_id, terminal_type NULLS FIRST;
+
+-- Leg 2 — TYPE-DIVERGENCE SURFACING: hub entries whose (user, text) carries
+-- more than one distinct non-null terminal_type. These coexist as distinct
+-- entries (never merged, never refused) and are the ENTRY 7 tripwire's data:
+-- same canonical text, conflicting typed terminals, adjudicated in the
+-- source quest (the hub is derived — it holds no state to fix).
+CREATE TEMP TABLE m1_divergence AS
+SELECT user_id,
+       canonical_text,
+       terminal_type,
+       member_claim_ids,
+       quest_count,
+       first_seen,
+       latest_seen
+FROM v_canonical_claims
+WHERE type_divergent;
+
+SELECT * FROM m1_divergence ORDER BY canonical_text, terminal_type;
 
 -- DESIGNATED SLOT — near-dup leg (ENTRY 3, R-036; wires to the embedding
 -- registry tables; shape pinned, tables absent until ENTRY 3):
---   SELECT 'near_dup', c.id, c.quest_id, cc.id, NULL::uuid
+--   SELECT 'near_dup', c.id, c.quest_id, v.canonical_text, v.terminal_type
 --   FROM claims c
 --   JOIN claim_embeddings_m<model> ce ON ce.claim_id = c.id
---   JOIN canonical_claims cc ON cc.user_id = c.user_id
---   JOIN canonical_claims_embeddings cce ON cce.canonical_claim_id = cc.id
---   WHERE 1 - (ce.vec <=> cce.vec) >= :near_dup_threshold
---     AND NOT EXISTS (active event between c and cc)
--- Until ENTRY 3 lands, near-dup arrives ONLY as operator/tool-minted
--- merge_events rows with match_kind='near_dup' + similarity (fixture E5).
+--   JOIN v_canonical_claims v ON v.user_id = c.user_id
+--    AND v.canonical_text <> c.canonical_text
+--   WHERE 1 - (ce.vec <=> convert_to(c.canonical_text embedding lookup))
+--         >= :near_dup_threshold
+-- Until ENTRY 3 lands, near-dup is visible only as text pairs the operator
+-- can eyeball (the seed keeps d3's near-duplicate wording of quest A's k5
+-- as the slot's fixture example).
 
 \echo '=== M2: lineage / graft path (claim -> origin quest chain) ==='
 -- Claim-level graft stamps (claims.origin_quest_id) + the quest lineage view
@@ -116,33 +121,56 @@ WHERE qs.quest_id IN (:'QD', :'QA')
 
 SELECT * FROM m2_corpus ORDER BY source_id;
 
-\echo '=== M3: report version chain + standing pointer + stale inventory ==='
+\echo '=== M3: report version chain + pinned fingerprints + stale inventory ==='
 -- The full version chain per quest with graph lineage (synthesis phase +
--- session), model, binding state, standing flag; stale = superseded
--- non-standing versions; imports are the R-027 provenance markers.
+-- session), model, binding state, standing flag, and the PINNED quest
+-- fingerprint (DR-17: the graph fingerprint at synthesis time). A version
+-- whose pin differs from the LIVE fingerprint (v_quest_graph_fingerprint)
+-- is STALE — the staleness tripwire's inventory. Fixture: v1/v2 pin the
+-- archived graph and are stale after the post-archive revisit; v3 pins the
+-- reworked graph and is clean (but not yet standing — finalization pending).
 CREATE TEMP TABLE m3_report_chain AS
 SELECT rv.quest_id,
        rv.version_seq,
        rv.model,
        p.round_no          AS synthesis_round,
        rv.created_session_id,
+       rv.quest_fingerprint,
+       fp.graph_fingerprint AS live_fingerprint,
        rv.standing,
        (rv.bound_at IS NOT NULL) AS bound,
        (SELECT count(*) FROM report_citations rc
          WHERE rc.report_version_id = rv.id)                        AS citations,
        (SELECT count(*) FROM report_citations rc
          WHERE rc.report_version_id = rv.id AND rc.imported)         AS imports,
-       (NOT rv.standing)                                             AS stale
+       (rv.quest_fingerprint <> fp.graph_fingerprint)               AS stale_fingerprint,
+       (NOT rv.standing)                                             AS superseded
 FROM report_versions rv
 JOIN phases p ON p.id = rv.synthesis_phase_id AND p.quest_id = rv.quest_id
+JOIN v_quest_graph_fingerprint fp ON fp.quest_id = rv.quest_id
 ORDER BY rv.quest_id, rv.version_seq;
 
 SELECT * FROM m3_report_chain;
 
+-- the same drift detector over ARCHIVE rows: pinned-at-freeze fingerprint
+-- versus the live graph (the post-archive rework fixture trips it)
+CREATE TEMP TABLE m3_archive_drift AS
+SELECT e.quest_id,
+       e.graph_fingerprint,
+       fp.graph_fingerprint AS live_fingerprint,
+       e.claims_at_archive,
+       (SELECT count(*) FROM claims c WHERE c.quest_id = e.quest_id) AS live_claims,
+       (e.graph_fingerprint <> fp.graph_fingerprint)                AS drifted
+FROM quest_lifecycle_events e
+JOIN v_quest_graph_fingerprint fp ON fp.quest_id = e.quest_id
+WHERE e.to_state = 'archived';
+
+SELECT * FROM m3_archive_drift;
+
 \echo '=== M4: visibility check (viewer carol) ==='
 -- What may a given viewer read: own rows + public door + user grants +
--- workspace grants. Sources now; canonical claims through the SAME
--- mechanism (D6). Private = no grant row.
+-- workspace grants. Sources now; the canonical-claim grant kind is deferred
+-- with the materialized hub (DR-16). Private = no grant row.
 CREATE TEMP TABLE m4_readable AS
 WITH viewer AS (SELECT :'CAROL'::uuid AS v),
 own_sources AS (
@@ -150,48 +178,33 @@ own_sources AS (
 ), granted_sources AS (
   SELECT rg.source_id
   FROM resource_grants rg, viewer
-  WHERE rg.source_id IS NOT NULL
-    AND (rg.is_public
-      OR rg.grantee_user_id = viewer.v
-      OR EXISTS (SELECT 1 FROM workspace_members wm
-                 WHERE wm.workspace_id = rg.grantee_workspace_id
-                   AND wm.user_id = viewer.v))
-), own_cclaims AS (
-  SELECT cc.id FROM canonical_claims cc, viewer WHERE cc.user_id = viewer.v
-), granted_cclaims AS (
-  SELECT rg.canonical_claim_id
-  FROM resource_grants rg, viewer
-  WHERE rg.canonical_claim_id IS NOT NULL
-    AND (rg.is_public
-      OR rg.grantee_user_id = viewer.v
-      OR EXISTS (SELECT 1 FROM workspace_members wm
-                 WHERE wm.workspace_id = rg.grantee_workspace_id
-                   AND wm.user_id = viewer.v))
+  WHERE rg.is_public
+     OR rg.grantee_user_id = viewer.v
+     OR EXISTS (SELECT 1 FROM workspace_members wm
+                WHERE wm.workspace_id = rg.grantee_workspace_id
+                  AND wm.user_id = viewer.v)
 )
 SELECT 'source'::text AS resource_kind, id AS resource_id FROM (
-  SELECT id FROM own_sources UNION SELECT source_id FROM granted_sources) u
-UNION ALL
-SELECT 'canonical_claim', id FROM (
-  SELECT id FROM own_cclaims UNION SELECT canonical_claim_id FROM granted_cclaims) u2;
+  SELECT id FROM own_sources UNION SELECT source_id FROM granted_sources) u;
 
 SELECT * FROM m4_readable ORDER BY resource_kind, resource_id;
 
 \echo '=== X1: cross-consistency ==='
--- archive drift must be zero; closure contract clean; latest mass snapshots
--- match live mass
+-- archive rows record their fingerprints; closure contract clean; latest
+-- mass snapshots match live mass
 CREATE TEMP TABLE x1_checks (
   check_name text PRIMARY KEY,
   violations integer NOT NULL
 );
 INSERT INTO x1_checks VALUES
- ('archive_drift', (
+ ('archive_fingerprint_recorded', (
    SELECT count(*) FROM quest_lifecycle_events e
-   JOIN quests q ON q.id = e.quest_id
    WHERE e.to_state = 'archived'
-     AND (e.claims_at_archive <> (SELECT count(*) FROM claims c WHERE c.quest_id = e.quest_id)
-       OR e.evidence_at_archive <> (SELECT count(*) FROM evidence v WHERE v.quest_id = e.quest_id)
-       OR e.frontier_open_at_archive <> (SELECT count(*) FROM frontier_entries f
-                                         WHERE f.quest_id = e.quest_id AND f.state = 'open')))),
+     AND (e.graph_fingerprint IS NULL
+       OR e.graph_fingerprint::text !~ '^[0-9a-f]{64}$'
+       OR NOT EXISTS (SELECT 1 FROM phases p
+                      WHERE p.id = e.verification_phase_id
+                        AND p.kind = 'verification' AND p.state = 'complete')))),
  ('bare_claims', (SELECT count(*) FROM v_claim_closure WHERE bare)),
  ('latest_mass_snapshot_mismatch', (
    SELECT count(*) FROM (
@@ -273,12 +286,14 @@ CREATE TEMP TABLE cq2_asserts (
   CONSTRAINT ck_cq2_nonempty CHECK (rows >= 1)
 );
 INSERT INTO cq2_asserts (query, rows) VALUES
-  ('M1_merge_candidates_adopt', (SELECT count(*) FROM m1_candidates WHERE leg = 'adopt')),
-  ('M1_merge_candidates_mint',  (SELECT count(*) FROM m1_candidates WHERE leg = 'mint')),
+  ('M1_reuse_lookup',           (SELECT count(*) FROM m1_reuse)),
+  ('M1_type_divergence',        (SELECT count(*) FROM m1_divergence)),
   ('M2_lineage_steps',          (SELECT count(*) FROM m2_lineage)),
   ('M2_corpus_rows',            (SELECT count(*) FROM m2_corpus)),
   ('M3_report_chain_versions',  (SELECT count(*) FROM m3_report_chain)),
-  ('M3_stale_inventory',        (SELECT count(*) FROM m3_report_chain WHERE stale)),
+  ('M3_fingerprint_stale',      (SELECT count(*) FROM m3_report_chain WHERE stale_fingerprint)),
+  ('M3_fingerprint_clean_pin',  (SELECT count(*) FROM m3_report_chain WHERE NOT stale_fingerprint)),
+  ('M3_archive_fingerprint_drift', (SELECT count(*) FROM m3_archive_drift WHERE drifted)),
   ('M4_readable_resources',     (SELECT count(*) FROM m4_readable)),
   ('B1_derived_bindings',       (SELECT count(*) FROM b1_derived)),
   ('B1_footnote_lines',         (SELECT count(*) FROM regexp_split_to_table(
@@ -290,29 +305,51 @@ CREATE TEMP TABLE cq2_zero_asserts (
   CONSTRAINT ck_cq2_zero CHECK (violations = 0)
 );
 INSERT INTO cq2_zero_asserts (query, violations) VALUES
- -- candidate generation excludes pairs that already have an ACTIVE event
- -- (fixture: d1 -> CC1 is a standing candidate row, so it must NOT resurface)
- ('M1_active_pairs_excluded', (
-   SELECT count(*) FROM m1_candidates
-   WHERE quest_claim_id = :'D1' AND canonical_claim_id = :'CC1')),
- -- the reversed merge (k5 -> CC2) has no live canonical member
- ('M1_reversed_not_member', (
-   SELECT count(*) FROM v_canonical_members m
-   JOIN merge_events e ON e.quest_claim_id = m.quest_claim_id
-   WHERE e.state = 'reversed')),
+ -- the hub covers every claim exactly once: nothing adopted, nothing refused
+ ('M1_hub_covers_every_claim_once', (
+   SELECT count(*) FROM claims c
+   WHERE (SELECT count(*) FROM v_canonical_claims v
+          WHERE v.user_id = c.user_id
+            AND v.canonical_text = c.canonical_text
+            AND c.id = ANY (v.member_claim_ids)) <> 1)),
+ -- the reuse fixture's shape: the unterminated beta-control entry groups
+ -- exactly k4 (quest A) + k11 (quest B); d1 keeps its own typed entry
+ ('M1_same_type_group_shape', (
+   SELECT count(*) FROM v_canonical_claims v
+   WHERE v.canonical_text = 'Momentum profits persist after controlling for market beta in the fixture literature.'
+     AND (   (v.terminal_type IS NULL
+              AND (v.quest_count <> 2
+                   OR v.member_claim_ids <> ARRAY['f0000000-0000-4000-8000-000000000004'::uuid,
+                                                  'f0000000-0000-4000-8000-000000000011'::uuid]))
+          OR (v.terminal_type = 'primary-empirical'
+              AND v.member_claim_ids <> ARRAY['f0000000-0000-4000-8000-000000000101'::uuid])
+          OR (v.terminal_type IS NULL AND v.type_divergent)))),
+ -- the divergence fixture's shape: exactly two plateau entries (k8 primary,
+ -- d4 residual), both flagged
+ ('M1_divergence_shape', (
+   (SELECT count(*) FROM v_canonical_claims v
+    WHERE v.canonical_text = 'Momentum returns plateau at the twelve-month horizon in the fixture sample.'
+      AND ((v.terminal_type = 'primary-empirical'
+            AND (v.member_claim_ids <> ARRAY['f0000000-0000-4000-8000-000000000008'::uuid]
+                 OR NOT v.type_divergent))
+        OR (v.terminal_type = 'residual-uncertainty'
+            AND (v.member_claim_ids <> ARRAY['f0000000-0000-4000-8000-000000000104'::uuid]
+                 OR NOT v.type_divergent))
+        OR v.terminal_type IS NULL))
+   + CASE WHEN (SELECT count(*) FROM v_canonical_claims
+                WHERE canonical_text = 'Momentum returns plateau at the twelve-month horizon in the fixture sample.') = 2
+          THEN 0 ELSE 1 END)),
  -- carol cannot read alice's private s2, the user-shared-with-bob s1, or
- -- private s7; and cannot read private canonical CC2/CC3
+ -- private s7
  ('M4_private_leaks', (
-   (SELECT count(*) FROM m4_readable WHERE resource_kind = 'source'
-      AND resource_id IN ('a0000000-0000-4000-8000-000000000001',
-                          'a0000000-0000-4000-8000-000000000002',
-                          'a0000000-0000-4000-8000-000000000007'))
-   + (SELECT count(*) FROM m4_readable WHERE resource_kind = 'canonical_claim'
-      AND resource_id NOT IN ('80000000-0000-4000-8000-000000000001')))),
+   SELECT count(*) FROM m4_readable
+   WHERE resource_id IN ('a0000000-0000-4000-8000-000000000001',
+                         'a0000000-0000-4000-8000-000000000002',
+                         'a0000000-0000-4000-8000-000000000007'))),
  -- X1 cross-consistency all zero
- ('X1_archive_drift',          (SELECT violations FROM x1_checks WHERE check_name = 'archive_drift')),
- ('X1_bare_claims',            (SELECT violations FROM x1_checks WHERE check_name = 'bare_claims')),
- ('X1_mass_snapshot_mismatch', (SELECT violations FROM x1_checks WHERE check_name = 'latest_mass_snapshot_mismatch')),
+ ('X1_archive_fingerprint_recorded', (SELECT violations FROM x1_checks WHERE check_name = 'archive_fingerprint_recorded')),
+ ('X1_bare_claims',                   (SELECT violations FROM x1_checks WHERE check_name = 'bare_claims')),
+ ('X1_mass_snapshot_mismatch',        (SELECT violations FROM x1_checks WHERE check_name = 'latest_mass_snapshot_mismatch')),
  -- B1: the recomputed binding equals the stored citations, row for row
  ('B1_binding_matches_stored', (
    SELECT count(*) FROM (

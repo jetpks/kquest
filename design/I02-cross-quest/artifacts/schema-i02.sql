@@ -3,11 +3,11 @@
 -- ----------------------------------------------------------------------------
 -- Layers ON TOP of design/I01-core-model/artifacts/schema.sql (frozen,
 -- read-only law). Everything here is ADDITIVE: new tables, views, indexes,
--- plus four ALTER TABLE ... ADD CONSTRAINT statements that add UNIQUE KEYS
--- ONLY (no column changes, no I01 file edits — DR-15). Those keys are the
--- composite-FK targets this iteration's cross-table pins require:
---   claims(id, user_id)               — merge_events pins the merged claim
---                                        to its owner (tenancy law, DR-01)
+-- plus three ALTER TABLE ... ADD CONSTRAINT statements that add UNIQUE KEYS
+-- ONLY (no column changes, no I01 file edits — DR-15, amended 2026-11-22:
+-- the fourth key, claims(id, user_id), is dropped from the set — its only
+-- consumer was the excised merge_events FK; DR-16). The remaining keys are
+-- the composite-FK targets this iteration's cross-table pins require:
 --   sources(id, anchorable)           — imported report citations pin the
 --                                        citable-only discriminator without a
 --                                        tenancy pin (imports are the
@@ -17,144 +17,43 @@
 --   phases(id, quest_id, kind, state) — archive events pin a COMPLETED
 --                                        VERIFICATION phase (R-022 schema half)
 --
--- Coverage: canonical hub + merge events (R-019/R-020, D3), lineage carriers
--- (R-021), lifecycle + archive gates (R-022), report versioning + stale
--- hygiene (R-023/R-024, L11), visibility access layer (R-025, D6), citation
--- binding + import marking (R-026/R-027). Cross-table laws that CHECK/FK/
--- UNIQUE cannot express live in the constraint catalog (DESIGN §10) at
--- tool-time / phase-gate enforcement points, exactly as I01 DR-09 rules.
--- plpgsql-free (I01 pattern; assert idiom = temp table + CHECK).
+-- Coverage: the canonical hub VIEW (R-019/R-020, D3, DR-16 — demoted from
+-- tables to a derived view by the operator ruling of 2026-11-22), lineage
+-- carriers (R-021), lifecycle + archive gates with GRAPH FINGERPRINTS
+-- (R-022, DR-17 — archive-immutability replaced by fingerprint detection),
+-- report versioning + stale hygiene (R-023/R-024, L11), visibility access
+-- layer (R-025, D6), citation binding + import marking (R-026/R-027).
+-- Cross-table laws that CHECK/FK/UNIQUE cannot express live in the
+-- constraint catalog (DESIGN §10) at tool-time / phase-gate enforcement
+-- points, exactly as I01 DR-09 rules. plpgsql-free (I01 pattern; assert
+-- idiom = temp table + CHECK).
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
--- DR-15: composite-FK targets on frozen I01 tables (additive unique keys)
+-- DR-15 (amended): composite-FK targets on frozen I01 tables (additive keys)
 -- ---------------------------------------------------------------------------
-ALTER TABLE claims  ADD CONSTRAINT uq_claims_id_user          UNIQUE (id, user_id);
 ALTER TABLE sources ADD CONSTRAINT uq_sources_id_anchorable   UNIQUE (id, anchorable);
 ALTER TABLE phases  ADD CONSTRAINT uq_phases_id_quest_kind        UNIQUE (id, quest_id, kind);
 ALTER TABLE phases  ADD CONSTRAINT uq_phases_id_quest_kind_state  UNIQUE (id, quest_id, kind, state);
 
 -- ---------------------------------------------------------------------------
--- canonical_claims — the per-user hub (R-019, D3, D6).
---   One row per DISTINCT canonical text per user: exactMatch merge semantics
---   (uq_canonical_claims_user_text). URN is the UNSALTED content hash of the
---   canonical text (DR-03): global identity lives at the hub, quest-salted
---   identity stays on claims (I01 DR-06 "the hub re-addresses on merge" =
---   membership, never rewriting quest claim URNs). terminal_type/basis are
---   adopted from the first approved member (DR-06); agreement among members
---   is checked at approval (tool-time, catalog).
--- ---------------------------------------------------------------------------
-CREATE TABLE canonical_claims (
-  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id        uuid NOT NULL,
-  canonical_text text NOT NULL CONSTRAINT ck_canonical_claims_text_nonempty
-                 CHECK (char_length(btrim(canonical_text)) > 0),
-  urn            text NOT NULL CONSTRAINT ck_canonical_claims_urn_format
-                 CHECK (urn ~ '^kb:cclaim:[1-9A-HJ-NP-Za-km-z]{10}$'),
-  terminal_type  text CONSTRAINT ck_canonical_claims_terminal_type
-                 CHECK (terminal_type IN ('definitional-mathematical', 'primary-empirical', 'residual-uncertainty')),
-  terminal_basis text,
-  created_at     timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT ck_canonical_claims_terminal_pair
-    CHECK ((terminal_type IS NULL) = (terminal_basis IS NULL)),
-  CONSTRAINT ck_canonical_claims_terminal_basis_nonempty
-    CHECK (terminal_basis IS NULL OR char_length(btrim(terminal_basis)) > 0),
-  -- exactMatch semantics: one hub row per canonical text per user
-  CONSTRAINT uq_canonical_claims_user_text UNIQUE (user_id, canonical_text),
-  CONSTRAINT uq_canonical_claims_user_urn  UNIQUE (user_id, urn),
-  -- composite-FK target for merge_events / resource_grants (DR-01 pattern)
-  CONSTRAINT uq_canonical_claims_id_user   UNIQUE (id, user_id),
-  CONSTRAINT fk_canonical_claims_user FOREIGN KEY (user_id) REFERENCES users (id)
-);
-
--- ---------------------------------------------------------------------------
--- merge_events — propose-only, operator-approved, reversible merges
---   (R-019/R-020, D3). One row per (quest claim, canonical claim) lifecycle:
---   candidate -> proposed -> approved | rejected ; approved -> reversed.
---   Per-row transitions are forward-only (workflow law, tool-time — the
---   merge ops layer refuses walks backward; catalog). The schema halves:
---   - decided states REQUIRE decided_by/decided_at (propose-only: an
---     approved row cannot exist without a recorded human decision);
---   - reversal requires reversed_by/reversed_at + a nonempty reversal_note;
---   - near_dup requires a similarity score, exact forbids one (the near-dup
---     leg is the designated slot ENTRY 3 wires to embeddings);
---   - at most ONE ACTIVE (candidate/proposed/approved) event per quest claim;
---   - same-user only: both endpoints pinned to the row's owner (cross-user
---     merges ride the visibility layer's grants — deferred door, DR-02).
---   Reversal NEVER mutates quest claims or canonical rows: membership is the
---   set of live approved events (v_canonical_members); un-merging flips the
---   event state and the audit trail stays on the row (DR-05).
--- ---------------------------------------------------------------------------
-CREATE TABLE merge_events (
-  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id             uuid NOT NULL,
-  canonical_claim_id  uuid NOT NULL,
-  quest_id            uuid NOT NULL,          -- the quest claim's quest
-  quest_claim_id      uuid NOT NULL,
-  match_kind          text NOT NULL CONSTRAINT ck_merge_events_match_kind
-                      CHECK (match_kind IN ('exact', 'near_dup')),
-  similarity          numeric(5,4),
-  state               text NOT NULL DEFAULT 'candidate' CONSTRAINT ck_merge_events_state
-                      CHECK (state IN ('candidate', 'proposed', 'approved', 'rejected', 'reversed')),
-  justification       text NOT NULL CONSTRAINT ck_merge_events_justification_nonempty
-                      CHECK (char_length(btrim(justification)) > 0),
-  proposed_session_id uuid,                   -- which session proposed (R-019)
-  decided_by          uuid,                   -- operator who approved/rejected
-  decided_at          timestamptz,
-  decision_note       text,
-  reversed_by         uuid,
-  reversed_at         timestamptz,
-  reversal_note       text,
-  created_at          timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT ck_merge_events_similarity_range
-    CHECK (similarity IS NULL OR (similarity >= 0 AND similarity <= 1)),
-  CONSTRAINT ck_merge_events_similarity_pair
-    CHECK ((match_kind = 'near_dup') = (similarity IS NOT NULL)),
-  CONSTRAINT ck_merge_events_decision_pair CHECK (
-    (state IN ('candidate', 'proposed')
-       AND decided_by IS NULL AND decided_at IS NULL)
-    OR (state IN ('approved', 'rejected', 'reversed')
-       AND decided_by IS NOT NULL AND decided_at IS NOT NULL)),
-  CONSTRAINT ck_merge_events_reversal_pair CHECK (
-    (state = 'reversed') = (reversed_by IS NOT NULL AND reversed_at IS NOT NULL)),
-  CONSTRAINT ck_merge_events_reversal_note_nonempty
-    CHECK (state <> 'reversed' OR char_length(btrim(reversal_note)) > 0),
-  CONSTRAINT ck_merge_events_decision_note_nonempty
-    CHECK (decision_note IS NULL OR char_length(btrim(decision_note)) > 0),
-  CONSTRAINT fk_merge_events_canonical
-    FOREIGN KEY (canonical_claim_id, user_id) REFERENCES canonical_claims (id, user_id),
-  CONSTRAINT fk_merge_events_claim
-    FOREIGN KEY (quest_claim_id, user_id) REFERENCES claims (id, user_id),
-  CONSTRAINT fk_merge_events_claim_quest
-    FOREIGN KEY (quest_claim_id, quest_id) REFERENCES claims (id, quest_id),
-  CONSTRAINT fk_merge_events_quest
-    FOREIGN KEY (quest_id, user_id) REFERENCES quests (id, user_id),
-  CONSTRAINT fk_merge_events_session
-    FOREIGN KEY (proposed_session_id, quest_id) REFERENCES sessions (id, quest_id),
-  CONSTRAINT fk_merge_events_decided_by FOREIGN KEY (decided_by) REFERENCES users (id),
-  CONSTRAINT fk_merge_events_reversed_by FOREIGN KEY (reversed_by) REFERENCES users (id)
-);
-
--- one ACTIVE lifecycle per quest claim (reversed/rejected rows never block
--- a re-proposal — that is the reversibility mechanics, DR-05)
-CREATE UNIQUE INDEX uq_merge_events_active_per_claim ON merge_events (quest_claim_id)
-  WHERE state IN ('candidate', 'proposed', 'approved');
-CREATE INDEX idx_merge_events_canonical ON merge_events (canonical_claim_id, state);
-
--- ---------------------------------------------------------------------------
--- quest_lifecycle_events — the audited quest state machine (R-022).
+-- quest_lifecycle_events — the audited state machine (R-022).
 --   records every quest.state transition with the LEGAL pair set as a named
 --   CHECK (the state diagram, machine-checkable). The ARCHIVE gates:
 --   - archive is once-only (partial unique);
 --   - archive REQUIRES a COMPLETED VERIFICATION phase — pinned by composite
---     FK with kind/state literals, so "archive-immutable AFTER verification"
+--     FK with kind/state literals, so "archive AFTER verification"
 --     is schema law, not workflow hope (DR-09);
---   - archive pins the graph counts (claims/evidence/frontier_open) at the
---     moment of freezing: drift is detectable forever after (queries-i02
---     cross-consistency assert; tool-time sweep at the archive op).
+--   - archive pins the graph counts (claims/evidence/frontier_open) AND the
+--     GRAPH FINGERPRINT at the moment of freezing (DR-17). Under the
+--     fingerprint law the quest is NOT immutable after archive: reworking a
+--     completed/archived quest in place is legal, and any drift between the
+--     pinned fingerprint and the live graph (v_quest_graph_fingerprint) is
+--     DETECTED, not prevented — the ENTRY 7 staleness tripwire's data.
 --   Transition pairs: paused is the interactive door (D5); stopped -> active
 --   is the phase-cap restart precedent (arc-run llm-trading v4); complete is
---   terminal — continuations are NEW quests, never re-opened ones.
+--   terminal in the LEDGER — continuations are NEW quests, never re-opened
+--   ones (the ledger law survives; the immutability law does not, DR-17).
 --   NOTE: the ledger records transitions; keeping quests.state in sync with
 --   the ledger is the lifecycle op's job (tool-time, catalog).
 -- ---------------------------------------------------------------------------
@@ -181,6 +80,10 @@ CREATE TABLE quest_lifecycle_events (
                            CHECK (evidence_at_archive IS NULL OR evidence_at_archive >= 0),
   frontier_open_at_archive integer CONSTRAINT ck_qle_frontier_open_nonneg
                            CHECK (frontier_open_at_archive IS NULL OR frontier_open_at_archive >= 0),
+  -- DR-17: the fingerprint of the quest's graph+corpus state AT FREEZE
+  -- (algorithm: v_quest_graph_fingerprint; spec: DESIGN §6)
+  graph_fingerprint        char(64) CONSTRAINT ck_qle_graph_fingerprint_format
+                           CHECK (graph_fingerprint IS NULL OR graph_fingerprint::text ~ '^[0-9a-f]{64}$'),
   occurred_at              timestamptz NOT NULL,
   note                     text,
   created_at               timestamptz NOT NULL DEFAULT now(),
@@ -200,6 +103,8 @@ CREATE TABLE quest_lifecycle_events (
     CHECK ((to_state = 'archived') = (claims_at_archive IS NOT NULL
                                   AND evidence_at_archive IS NOT NULL
                                   AND frontier_open_at_archive IS NOT NULL)),
+  CONSTRAINT ck_quest_lifecycle_archive_fingerprint_pair
+    CHECK ((to_state = 'archived') = (graph_fingerprint IS NOT NULL)),
   CONSTRAINT fk_qle_quest FOREIGN KEY (quest_id, user_id) REFERENCES quests (id, user_id),
   CONSTRAINT fk_quest_lifecycle_verification
     FOREIGN KEY (verification_phase_id, quest_id, verification_phase_kind, verification_phase_state)
@@ -218,8 +123,11 @@ CREATE INDEX idx_qle_quest ON quest_lifecycle_events (quest_id, occurred_at);
 --   session produced it (graph lineage — pinned by composite FKs, including
 --   the phase-KIND literal so a report version can never claim a decompose
 --   or verification phase), which model wrote it (re-synthesis economics),
---   the standing flag (at most ONE standing version per quest), and the
---   binding-pass stamp (R-026: bound_at + binding_pass are paired).
+--   the standing flag (at most ONE standing version per quest), the
+--   binding-pass stamp (R-026: bound_at + binding_pass are paired), and the
+--   PINNED QUEST FINGERPRINT (DR-17): the graph fingerprint at synthesis
+--   time. A version whose pin differs from the live fingerprint is STALE —
+--   visible, sweep-detectable (queries-i02.sql M3), never silently fresh.
 --   Stale hygiene (R-024): superseded versions keep standing=false forever;
 --   the standing flip is the finalization op's transaction (tool-time).
 -- ---------------------------------------------------------------------------
@@ -238,6 +146,10 @@ CREATE TABLE report_versions (
                        CHECK (body_blob_key ~ '^reports/[0-9a-f-]{36}/v[0-9]+\.md$'),
   body_sha256          char(64) NOT NULL CONSTRAINT ck_report_versions_body_sha
                        CHECK (body_sha256::text ~ '^[0-9a-f]{64}$'),
+  -- DR-17: the graph fingerprint this version was synthesized against
+  -- (same format law as body_sha256; same algorithm as archive rows)
+  quest_fingerprint    char(64) NOT NULL CONSTRAINT ck_report_versions_quest_fingerprint
+                       CHECK (quest_fingerprint::text ~ '^[0-9a-f]{64}$'),
   standing             boolean NOT NULL DEFAULT false,
   bound_at             timestamptz,
   binding_pass         text CONSTRAINT ck_report_versions_binding_pass_nonempty
@@ -334,31 +246,26 @@ CREATE INDEX idx_workspace_members_user ON workspace_members (user_id);
 -- resource_grants — ONE sharing mechanism, additive over ownership
 --   (R-025, D6). Scope ladder: private (default = NO row) < shared (user
 --   grant) < workspace (workspace grant) < public (the global door).
---   Serves sources now and canonical claims in the same shape (reports and
---   quests are future additive kinds — DR-14). Exactly-one CHECKs keep the
---   polymorphism honest WITHOUT a polymorphic FK: each resource column is a
---   real composite FK to its owner table, and the owner must OWN the
---   resource (cross-visibility leaks are structurally impossible).
+--   Serves SOURCES now (DR-14, amended by DR-16: the canonical-claim grant
+--   kind is deferred with the materialized hub — the hub is a derived view
+--   and holds no rows to grant on; the kind returns as an additive nullable
+--   column + composite FK when ENTRY 3+ materializes hub identity). Exactly
+--   one grantee keeps the polymorphism honest WITHOUT a polymorphic FK.
 -- ---------------------------------------------------------------------------
 CREATE TABLE resource_grants (
   id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   owner_user_id        uuid NOT NULL,
-  source_id            uuid,
-  canonical_claim_id   uuid,
+  source_id            uuid NOT NULL,
   grantee_user_id      uuid,
   grantee_workspace_id uuid,
   is_public            boolean NOT NULL DEFAULT false,
   note                 text,
   granted_at           timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT ck_resource_grants_resource_exactly_one
-    CHECK ((source_id IS NULL) <> (canonical_claim_id IS NULL)),
   CONSTRAINT ck_resource_grants_grantee_exactly_one
     CHECK ((grantee_user_id IS NOT NULL)::int + (grantee_workspace_id IS NOT NULL)::int + (is_public::int) = 1),
   CONSTRAINT fk_resource_grants_owner FOREIGN KEY (owner_user_id) REFERENCES users (id),
   CONSTRAINT fk_resource_grants_source
     FOREIGN KEY (source_id, owner_user_id) REFERENCES sources (id, user_id),
-  CONSTRAINT fk_resource_grants_canonical
-    FOREIGN KEY (canonical_claim_id, owner_user_id) REFERENCES canonical_claims (id, user_id),
   CONSTRAINT fk_resource_grants_grantee_user FOREIGN KEY (grantee_user_id) REFERENCES users (id),
   CONSTRAINT fk_resource_grants_grantee_workspace FOREIGN KEY (grantee_workspace_id) REFERENCES workspaces (id)
 );
@@ -370,22 +277,147 @@ CREATE INDEX idx_resource_grants_grantee_workspace ON resource_grants (grantee_w
 -- consumer — gates, tools and the hub queries below read these views).
 -- ============================================================================
 
--- Hub membership = the LIVE approved merge events (reversal flips state, so
--- a reversed approval drops out without deleting anything — DR-05).
--- DISTINCT ON takes the newest decided_at per quest claim, guarding any
--- future re-approval after reversal (one ACTIVE lifecycle is already
--- enforced by uq_merge_events_active_per_claim).
-CREATE VIEW v_canonical_members AS
-SELECT DISTINCT ON (me.quest_claim_id)
-       me.user_id,
-       me.canonical_claim_id,
-       me.quest_claim_id,
-       me.quest_id,
-       me.id AS merge_event_id,
-       me.decided_at
-FROM merge_events me
-WHERE me.state = 'approved'
-ORDER BY me.quest_claim_id, me.decided_at DESC;
+-- ---------------------------------------------------------------------------
+-- v_canonical_claims — THE HUB, as a derived view over quest claims
+--   (R-019/R-020, D3; DR-16, operator ruling 2026-11-22). Identity =
+--   (user_id, canonical_text, terminal_type): exact-text matches with
+--   DIFFERING terminal types coexist as distinct entries — nothing is
+--   adopted, nothing refused. canonical_text is the I01 DR-05 GENERATED
+--   normalization, so the derivation is exactMatch on the normalized form
+--   (DR-02 option A, ruled). type_divergent flags same-text entries whose
+--   (user, text) carries MORE THAN ONE distinct NON-NULL terminal_type —
+--   an unterminated claim (terminal_type IS NULL) is its own entry value
+--   and is NOT by itself a divergence; conflicting TYPES are the ENTRY 7
+--   tripwire signal, adjudicated in the source quest (the hub is derived).
+--   first_seen/latest_seen are informational (min/max claim created_at),
+--   not part of identity. Membership is computed, never stored: the view
+--   IS the hub (L10 — no derived data to invalidate).
+-- ---------------------------------------------------------------------------
+CREATE VIEW v_canonical_claims AS
+SELECT c.user_id,
+       c.canonical_text,
+       c.terminal_type,
+       array_agg(c.id ORDER BY c.quest_id, c.id) AS member_claim_ids,
+       count(DISTINCT c.quest_id)                AS quest_count,
+       min(c.created_at)                         AS first_seen,
+       max(c.created_at)                         AS latest_seen,
+       (count(*) FILTER (WHERE c.terminal_type IS NOT NULL)
+          OVER (PARTITION BY c.user_id, c.canonical_text)) > 1 AS type_divergent
+FROM claims c
+GROUP BY c.user_id, c.canonical_text, c.terminal_type;
+
+-- ---------------------------------------------------------------------------
+-- v_quest_graph_fingerprint — the graph+corpus fingerprint (DR-17).
+--   fingerprint(q) = hex(sha256(UTF8(S(q)))) where S(q) is the CANONICAL
+--   SERIALIZATION below (spec verbatim in DESIGN §6; netstring field
+--   encoding: NULL -> 'N', value v -> 'S' || octet_length(UTF8(v)) || ':'
+--   || v; fields joined ';', rows joined chr(10), sections prefixed
+--   'name:'). Rows are ordered by each table's quest-scoped unique key, so
+--   the serialization is a total order on the quest's state. quests.state
+--   and all created_at stamps are DELIBERATELY excluded: the fingerprint
+--   covers the graph+corpus CONTENT, so a lifecycle transition (e.g. the
+--   archive itself) never changes it, while any later claim/evidence/edge/
+--   derivation/frontier/corpus change does. One row per quest.
+-- ---------------------------------------------------------------------------
+CREATE VIEW v_quest_graph_fingerprint AS
+SELECT q.id AS quest_id,
+       encode(sha256(convert_to(
+         'kquest-graph-fingerprint/1' || chr(10)
+         || 'corpus:' || coalesce((
+              SELECT string_agg(
+                CASE WHEN qs.source_id IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(qs.source_id::text, 'UTF8')) || ':' || qs.source_id::text END
+                || ';' ||
+                CASE WHEN qs.added_at IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to((extract(epoch FROM qs.added_at))::text, 'UTF8'))
+                          || ':' || (extract(epoch FROM qs.added_at))::text END,
+                chr(10) ORDER BY qs.source_id)
+              FROM quest_sources qs WHERE qs.quest_id = q.id), '') || chr(10)
+         || 'claims:' || coalesce((
+              SELECT string_agg(
+                'S' || octet_length(convert_to(c.quest_seq::text, 'UTF8')) || ':' || c.quest_seq::text
+                || ';' ||
+                CASE WHEN c.id IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(c.id::text, 'UTF8')) || ':' || c.id::text END
+                || ';' ||
+                CASE WHEN c.canonical_text IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(c.canonical_text, 'UTF8')) || ':' || c.canonical_text END
+                || ';' ||
+                CASE WHEN c.terminal_type IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(c.terminal_type, 'UTF8')) || ':' || c.terminal_type END
+                || ';' ||
+                CASE WHEN c.terminal_basis IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(c.terminal_basis, 'UTF8')) || ':' || c.terminal_basis END
+                || ';' ||
+                CASE WHEN c.origin_quest_id IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(c.origin_quest_id::text, 'UTF8')) || ':' || c.origin_quest_id::text END,
+                chr(10) ORDER BY c.quest_seq, c.id)
+              FROM claims c WHERE c.quest_id = q.id), '') || chr(10)
+         || 'evidence:' || coalesce((
+              SELECT string_agg(
+                CASE WHEN e.id IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(e.id::text, 'UTF8')) || ':' || e.id::text END
+                || ';' ||
+                CASE WHEN e.source_id IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(e.source_id::text, 'UTF8')) || ':' || e.source_id::text END
+                || ';' ||
+                'S' || octet_length(convert_to(e.span_start::text, 'UTF8')) || ':' || e.span_start::text
+                || ';' ||
+                'S' || octet_length(convert_to(e.span_end::text, 'UTF8')) || ':' || e.span_end::text
+                || ';' ||
+                CASE WHEN e.span_text IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(e.span_text, 'UTF8')) || ':' || e.span_text END
+                || ';' ||
+                CASE WHEN e.reading IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(e.reading, 'UTF8')) || ':' || e.reading END,
+                chr(10) ORDER BY e.source_id, e.span_start, e.span_end, e.id)
+              FROM evidence e WHERE e.quest_id = q.id), '') || chr(10)
+         || 'edges:' || coalesce((
+              SELECT string_agg(
+                CASE WHEN ee.evidence_id IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(ee.evidence_id::text, 'UTF8')) || ':' || ee.evidence_id::text END
+                || ';' ||
+                CASE WHEN ee.relation IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(ee.relation, 'UTF8')) || ':' || ee.relation END
+                || ';' ||
+                CASE WHEN ee.claim_id IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(ee.claim_id::text, 'UTF8')) || ':' || ee.claim_id::text END
+                || ';' ||
+                'S' || octet_length(convert_to(ee.position::text, 'UTF8')) || ':' || ee.position::text,
+                chr(10) ORDER BY ee.evidence_id, ee.relation, ee.position)
+              FROM evidence_edges ee WHERE ee.quest_id = q.id), '') || chr(10)
+         || 'derivations:' || coalesce((
+              SELECT string_agg(
+                CASE WHEN cd.claim_id IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(cd.claim_id::text, 'UTF8')) || ':' || cd.claim_id::text END
+                || ';' ||
+                CASE WHEN cd.parent_claim_id IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(cd.parent_claim_id::text, 'UTF8')) || ':' || cd.parent_claim_id::text END
+                || ';' ||
+                'S' || octet_length(convert_to(cd.position::text, 'UTF8')) || ':' || cd.position::text,
+                chr(10) ORDER BY cd.claim_id, cd.position)
+              FROM claim_derivations cd WHERE cd.quest_id = q.id), '') || chr(10)
+         || 'frontier:' || coalesce((
+              SELECT string_agg(
+                CASE WHEN f.claim_id IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(f.claim_id::text, 'UTF8')) || ':' || f.claim_id::text END
+                || ';' ||
+                CASE WHEN f.need IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(f.need, 'UTF8')) || ':' || f.need END
+                || ';' ||
+                'S' || octet_length(convert_to(f.uncertainty::text, 'UTF8')) || ':' || f.uncertainty::text
+                || ';' ||
+                'S' || octet_length(convert_to(f.relevance::text, 'UTF8')) || ':' || f.relevance::text
+                || ';' ||
+                CASE WHEN f.state IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(f.state, 'UTF8')) || ':' || f.state END
+                || ';' ||
+                CASE WHEN f.closure_type IS NULL THEN 'N'
+                     ELSE 'S' || octet_length(convert_to(f.closure_type, 'UTF8')) || ':' || f.closure_type END,
+                chr(10) ORDER BY f.need)
+              FROM frontier_entries f WHERE f.quest_id = q.id), '')
+         , 'UTF8')), 'hex') AS graph_fingerprint
+FROM quests q;
 
 -- Quest lineage chain (R-021): every ancestor reachable through
 -- quests.source_quest_id, each hop labelled with the DESCENDANT quest's
@@ -414,8 +446,8 @@ JOIN quests q  ON q.id  = lin.quest_id
 JOIN quests qa ON qa.id = lin.ancestor_quest_id;
 
 -- Effective scope per shared resource (R-025): public > workspace > shared;
--- private resources have NO row here (absence = private). One definition
--- over both resource kinds — the "one mechanism" made queryable.
+-- private resources have NO row here (absence = private). Sources now; the
+-- "one mechanism" gains arms back as additive kinds (DR-14/DR-16).
 CREATE VIEW v_resource_visibility AS
 SELECT 'source'::text AS resource_kind,
        rg.source_id AS resource_id,
@@ -424,15 +456,4 @@ SELECT 'source'::text AS resource_kind,
             WHEN count(rg.grantee_workspace_id) > 0 THEN 'workspace'::text
             ELSE 'shared'::text END AS effective_scope
 FROM resource_grants rg
-WHERE rg.source_id IS NOT NULL
-GROUP BY rg.source_id, rg.owner_user_id
-UNION
-SELECT 'canonical_claim'::text,
-       rg.canonical_claim_id,
-       rg.owner_user_id,
-       CASE WHEN bool_or(rg.is_public) THEN 'public'::text
-            WHEN count(rg.grantee_workspace_id) > 0 THEN 'workspace'::text
-            ELSE 'shared'::text END
-FROM resource_grants rg
-WHERE rg.canonical_claim_id IS NOT NULL
-GROUP BY rg.canonical_claim_id, rg.owner_user_id;
+GROUP BY rg.source_id, rg.owner_user_id;

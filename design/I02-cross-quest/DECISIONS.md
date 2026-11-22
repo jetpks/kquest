@@ -1,21 +1,29 @@
 # I02 — cross-quest: DECISIONS
 
-Numbered decision records for the cross-quest design. Status is DECIDED or
+Numbered decision records for the cross-quest design. Status is DECIDED,
 OPERATOR-RULING-NEEDED (options + recommendation attached; the artifact
-ships the recommendation as working default until ruled). Every record names
-alternatives considered. Structure is machine-checked by
-`artifacts/check-coverage.sh`. I01's records are cited as "I01 DR-xx"; bare
-DR-xx references are this file's.
+ships the recommendation as working default until ruled), or SUPERSEDED
+(record kept for history; the superseding record names the ruling). Every
+record names alternatives considered. Structure is machine-checked by
+`artifacts/check-coverage.sh`. I01's records are cited as "I01 DR-xx";
+bare DR-xx references are this file's.
 
 Grounds-mandated records: cross-quest canonicalization scope (DR-02),
 merge-reversibility mechanics (DR-05) — plus records discovered mid-design
 (DR-09, DR-13, DR-15).
 
+**Amendment 2026-11-22 (operator ratification
+`notes/ratification-20261122T1550-cross-quest.md`)**: DR-01…DR-07 are
+SUPERSEDED by DR-16/DR-17 — the hub is demoted to a derived view and
+archive-immutability is replaced by the fingerprint mechanism. The records
+below are kept verbatim for history.
+
 ---
 
 ## DR-01 — Canonical hub ownership: per-user rows, global URN identity
 
-**Status:** DECIDED
+**Status:** SUPERSEDED (superseded by DR-16/DR-17 per operator ruling
+2026-11-22; table-era record kept for history)
 **Decision:** `canonical_claims` rows carry `user_id NOT NULL` exactly like
 sources (I01 DR-01 posture): one hub per user, deduped within it by
 `uq_canonical_claims_user_text`. The URN is the unsalted content hash of the
@@ -39,7 +47,10 @@ WITHIN a user's quests, which is the primary case (lineage, grafts).
 
 ## DR-02 — Cross-quest canonicalization scope: exact canonical-text, same-user, near-dup as slot
 
-**Status:** OPERATOR-RULING-NEEDED
+**Status:** SUPERSEDED (superseded by DR-16/DR-17 per operator ruling
+2026-11-22 — the ruling APPROVED option A: exact canonical-text is the
+view's derivation, near-dup remains the designated growth slot; carried
+into DR-16)
 **Decision:** ship exact canonical-text matching, same-user, with near-dup
 as the designated slot (working default until ruled): a quest claim merges
 with a canonical claim iff their `canonical_text` values are BYTE-EQUAL
@@ -80,7 +91,9 @@ embedding scores on record (ENTRY 3 gives the data to rule with).
 
 ## DR-03 — Canonical claim URN: unsalted content hash (cashing I01 DR-06's re-addressing promise)
 
-**Status:** DECIDED
+**Status:** SUPERSEDED (superseded by DR-16/DR-17 per operator ruling
+2026-11-22; the algorithm is preserved in this record for the ENTRY 3+
+materialized-hub era)
 **Decision:** `kb:cclaim:` + first 10 base58 chars of
 `sha256(utf8(canonical_text))` — no salt. Quest claims keep their
 quest-salted URNs forever (I01 DR-06); a merge NEVER rewrites a claim URN.
@@ -106,7 +119,8 @@ claim URNs on merge — rejected above (audit-breaker).
 
 ## DR-04 — Merge event model: one row per lifecycle, propose-only audit in the row
 
-**Status:** DECIDED
+**Status:** SUPERSEDED (superseded by DR-16/DR-17 per operator ruling
+2026-11-22; merge_events excised with the table-era hub)
 **Decision:** `merge_events` holds ONE row per (quest claim, canonical
 claim) lifecycle with the full timeline as columns: state (candidate →
 proposed → approved | rejected; approved → reversed), justification
@@ -133,7 +147,9 @@ unique cannot express, weakening the one-active law.
 
 ## DR-05 — Merge-reversibility mechanics: state flip on the row; re-merge is a new row; zero graph mutation
 
-**Status:** DECIDED
+**Status:** SUPERSEDED (superseded by DR-16/DR-17 per operator ruling
+2026-11-22; moot under the derived view — there is no membership state to
+reverse)
 **Decision:** reversal = UPDATE of the event row: approved → reversed, plus
 reversed_by/reversed_at/reversal_note (all three required). Membership is
 the set of rows with state='approved' (`v_canonical_members`), so a
@@ -157,7 +173,15 @@ apply-on-commit) — the staging IS the candidate/proposed states already.
 
 ## DR-06 — Terminal reconciliation at approval: adopt-first-member; refuse on type divergence
 
-**Status:** OPERATOR-RULING-NEEDED
+**Status:** SUPERSEDED (superseded by DR-16/DR-17 per operator ruling
+2026-11-22). **Operator ruling text (2026-11-22):** "DR-06 SUPERSEDED BY
+OPERATOR RULING: hub identity = (canonical_text, terminal_type).
+Exact-text matches with differing types coexist as distinct hub entries;
+nothing adopted, nothing refused. Same-text-multiple-types remains a
+TRIPWIRE signal (ENTRY 7); adjudication happens in the source quest (hub
+is derived — L10). Driver concurrence recorded: refusal mechanics were
+table-era thinking, incoherent under a view." — this supersedes the
+recommendation (Option A) recorded below.
 **Decision:** adopt-first-member terminals with refusal on type divergence
 (working default until ruled): the canonical claim's terminal_type/basis
 are adopted from its FIRST approved member. A subsequent exact member
@@ -190,7 +214,9 @@ divergence between byte-equal claims.
 
 ## DR-07 — Evidence reconciliation: no copies; canonical evidence is a view over members
 
-**Status:** DECIDED
+**Status:** SUPERSEDED (superseded by DR-16/DR-17 per operator ruling
+2026-11-22; the principle survives verbatim inside DR-16's view law — the
+hub never owns evidence)
 **Decision:** merges never touch evidence. A canonical claim's evidence
 base is the union of its member quest claims' evidence (via
 `v_canonical_members` ⋈ evidence_edges), computed where needed. Hub rows
@@ -391,16 +417,22 @@ SCOPE columns on sources/canonical_claims (ALTERs on frozen tables) for
 private/shared/public with a separate grants table for targets — two
 mechanisms where one suffices; absence-as-private avoids the ALTER.
 
-## DR-15 — The four additive unique keys on frozen I01 tables
+## DR-15 — The additive unique keys on frozen I01 tables (amended: three)
 
-**Status:** DECIDED
-**Decision:** `schema-i02.sql` opens with four ALTER TABLE … ADD CONSTRAINT
-… UNIQUE statements — `claims (id, user_id)`, `sources (id, anchorable)`,
-`phases (id, quest_id, kind)`, `phases (id, quest_id, kind, state)` — and
-nothing else touches I01 tables. These are new unique KEYS (indexes) only:
+**Status:** DECIDED (amended 2026-11-22 per the operator ruling)
+**Decision:** `schema-i02.sql` opens with THREE ALTER TABLE … ADD CONSTRAINT
+… UNIQUE statements — `sources (id, anchorable)`, `phases (id, quest_id,
+kind)`, `phases (id, quest_id, kind, state)` — and nothing else touches I01
+tables. As ratified this record named FOUR keys, the fourth being
+`claims (id, user_id)`; the amendment DROPS it — its only consumer was the
+excised merge_events tenancy pin `fk_merge_events_claim`, and no surviving
+law needs it (DR-16). The remaining three are still consumed:
+`uq_sources_id_anchorable` by `fk_report_citations_imported_source`, the
+phase keys by `fk_report_versions_phase` and
+`fk_quest_lifecycle_verification`. These are new unique KEYS (indexes) only:
 no columns added, no semantics changed, no I01 file edited; they are the
-composite-FK targets this iteration's cross-table pins require (merge
-tenancy pin, cross-user citable-only import pin, synthesis-phase lineage
+composite-FK targets this iteration's cross-table pins require (cross-user
+citable-only import pin, synthesis-phase lineage
 pin, archive verification gate pin). No I01 amendments are proposed by this
 iteration.
 **Rationale:** the boundary allows ALTERs where a DR justifies them; unique
@@ -408,8 +440,99 @@ keys are strictly additive (any query true before is true after) and are
 the house pattern for conditional/pinned references (I01 DR-07/DR-08 built
 theirs at table-creation time; these tables were frozen before the pins
 existed).
-**Alternatives considered:** (a) no pins — the four laws (M-TEN's cross-user
-arm, Q-VER, R-SEQ's phase-kind lineage) degrade to tool-time checks;
+**Alternatives considered:** (a) no pins — the covered laws (the import
+citable-only pin, Q-VER, R-SEQ's phase-kind lineage) degrade to tool-time
+checks;
 (b) replica join-key tables — the same indexes plus sync obligations;
 (c) propose I01 file amendments to add these keys inline — unnecessary:
 ADD CONSTRAINT achieves the target without touching read-only files.
+
+---
+
+## DR-16 — The hub is a derived view: identity includes terminal_type; divergence is a tripwire, never a refusal
+
+**Status:** DECIDED (operator ruling 2026-11-22; supersedes DR-01…DR-07's
+table-era hub law — DR-02's option A and DR-06's question are both resolved
+by this ruling)
+**Decision:** `canonical_claims` and `merge_events` tables and the
+propose/approve/reverse workflow are EXCISED. The hub is the derived view
+`v_canonical_claims` over quest claims, with identity =
+(user_id, canonical_text, terminal_type): exact canonical-text matches
+(the I01 DR-05 generated normalization — DR-02 = A, ruled) with DIFFERING
+terminal types coexist as distinct hub entries; nothing is adopted,
+nothing refused. Columns: member_claim_ids (array_agg), quest_count,
+first_seen/latest_seen (informational), and `type_divergent` — TRUE iff the
+(user, text) carries more than one distinct NON-NULL terminal type
+(computable in the one view via a FILTER window over the grouped rows; an
+unterminated claim is its own entry value and is not by itself divergence).
+Divergence is an ENTRY 7 tripwire SIGNAL, adjudicated in the source quest
+(catalog H-DIV); the hub holds no state to fix. Near-dup remains the
+designated growth slot; the growth path is to materialize identity as a
+table when ENTRY 3 embeddings make near-dup real (the unsalted
+`kb:cclaim:` URN algorithm is preserved in DR-03's history for that era),
+at which point the canonical-claim grant kind returns to `resource_grants`
+as an additive column (its FK target died with the table; the kind is
+deferred, not redesigned).
+**Rationale:** the operator's ruling: operator load for merge approval is
+zero-value against a derived lookup; refusal mechanics were "table-era
+thinking, incoherent under a view" (driver concurrence recorded in the
+ratification note). A view keeps every hub answer recomputable from quest
+claims (L10 — no derived data to invalidate), keeps cross-quest reads
+direct (the hub is an index, never a gate), and converts terminal-type
+disagreement from a blocked workflow into surfaced evidence — the
+adjudication lives where the claims live, in the source quest.
+**Cited authority:** operator rulings received 2026-11-22 ~16:15 in
+`notes/ratification-20261122T1550-cross-quest.md` ("RULINGS RECEIVED"):
+"Hub DEMOTED TO VIEW (path B)" and "DR-06 SUPERSEDED BY OPERATOR RULING".
+**Alternatives considered:** (a) keep the tables with an auto-approve
+workflow — still stores derived state and an approval surface with nothing
+to approve; (b) view over (user, text) only, terminal dropped from
+identity — silently erases the divergence the ruling wants surfaced;
+(c) view plus a lightweight conflicts table for divergences — a second home
+for a signal the view already computes; ENTRY 7 owns adjudication.
+
+---
+
+## DR-17 — Fingerprints replace archive-immutability: drift is detected, not prevented
+
+**Status:** DECIDED (operator ruling 2026-11-22; replaces the Q-IMM law and
+resolves the judge's F1 archive/merge contradiction)
+**Decision:** quests get a GRAPH FINGERPRINT — sha256 over a canonical
+serialization of the quest's graph+corpus state, implemented as the view
+`v_quest_graph_fingerprint` (serialization spec normative in DESIGN §6:
+six ordered sections — corpus, claims, evidence, edges, derivations,
+frontier — netstring-encoded fields, rows ordered by each table's
+quest-scoped unique key, quests.state and created_at stamps deliberately
+excluded so lifecycle transitions never change the fingerprint while any
+graph/corpus change does). Archive lifecycle rows RECORD the fingerprint at
+freeze (`graph_fingerprint`, presence-paired with to_state='archived');
+report versions PIN the fingerprint at synthesis (`quest_fingerprint`,
+NOT NULL, hex64). Reworking a completed/archived quest IN PLACE is LEGAL —
+the operator's revisit-in-place pattern — and drift between any pinned
+fingerprint and the live graph is a visible STALENESS TRIPWIRE (catalog
+Q-FP; ENTRY 7 enforcement; queries-i02.sql M3 is the inventory). What
+SURVIVES of the old law: the lifecycle state machine, once-only archive,
+and the completed-verification archive gate; the pinned counts remain as
+history. Q-IMM and its graph-op precondition class are excised; F1
+dissolves with the law (the fixture now proves post-archive rows legal:
+claim d4 and report v3 land on archived quest D, and the drift is visible).
+**Rationale:** the old law tried to freeze what the operator's actual usage
+pattern revisits; prevention (a tool-time precondition the schema cannot
+express anyway — DR-09's analysis) bought a contradiction (F1) instead of
+safety. A content fingerprint turns "did this quest's graph move since X?"
+into one comparison, works for ANY pinner (archive rows, report versions,
+future: exports, verifications), and keeps the audited state machine as the
+record of process while the fingerprint is the record of content.
+**Cited authority:** operator rulings received 2026-11-22 ~16:15 in
+`notes/ratification-20261122T1550-cross-quest.md`: "ARCHIVE-IMMUTABILITY
+LAW REPLACED BY FINGERPRINTS … Lifecycle state machine + once-only archive
++ verification gate survive. F1 dissolves with the law. Matches the
+operator's revisit-in-place usage pattern from the PoC."
+**Alternatives considered:** (a) keep Q-IMM, retime the fixtures (the
+"strict" F1 option) — colder archive semantics, loses post-archive
+compounding, and still unverifiable in DDL; (b) counts-only drift detection
+(the old Q-CNT sweep) — detects that counts moved, not WHAT; two graphs
+with equal counts but different content hash differently; (c) hash chains
+per row (each row hashing its predecessor) — append-only tamper-evidence
+for a law that now permits appends anyway; the whole-graph fingerprint
+answers the actual question (is this pin stale?) with one comparison.

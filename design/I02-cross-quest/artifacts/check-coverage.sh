@@ -22,7 +22,6 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DESIGN="$SCRIPT_DIR/../DESIGN.md"
 DECISIONS="$SCRIPT_DIR/../DECISIONS.md"
-SCHEMA="$SCRIPT_DIR/schema.sql"
 I02SCHEMA="$SCRIPT_DIR/schema-i02.sql"
 ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 I01DIR="$ROOT/design/I01-core-model"

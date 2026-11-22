@@ -55,22 +55,21 @@ if [ $rc -eq 0 ]; then
   "$PSQL" -v ON_ERROR_STOP=1 -d "$DB" <<'SQL' || rc=1
 CREATE TEMP TABLE ddl_asserts (check_name text PRIMARY KEY, ok boolean NOT NULL);
 INSERT INTO ddl_asserts (check_name, ok) VALUES
-  -- canonical hub (R-019)
-  ('canonical_claims >= 3',                  (SELECT count(*) >= 3 FROM canonical_claims)),
-  ('canonical claims with adopted terminal >= 1', (SELECT count(*) >= 1 FROM canonical_claims WHERE terminal_type IS NOT NULL)),
-  ('merge_events >= 6',                      (SELECT count(*) >= 6 FROM merge_events)),
-  ('merge candidate >= 1',                   (SELECT count(*) >= 1 FROM merge_events WHERE state = 'candidate')),
-  ('merge proposed >= 1',                    (SELECT count(*) >= 1 FROM merge_events WHERE state = 'proposed')),
-  ('merge approved >= 2',                    (SELECT count(*) >= 2 FROM merge_events WHERE state = 'approved')),
-  ('merge rejected (near_dup) >= 1',         (SELECT count(*) >= 1 FROM merge_events WHERE state = 'rejected' AND match_kind = 'near_dup')),
-  ('merge reversed >= 1',                    (SELECT count(*) >= 1 FROM merge_events WHERE state = 'reversed')),
-  ('one active merge lifecycle per claim',   (SELECT count(*) = 0 FROM (
-      SELECT quest_claim_id FROM merge_events
-      WHERE state IN ('candidate','proposed','approved')
-      GROUP BY quest_claim_id HAVING count(*) > 1) t)),
-  ('reversed merge leaves no live member',   (SELECT count(*) = 0 FROM (
-      SELECT DISTINCT quest_claim_id FROM merge_events WHERE state = 'reversed') r
-      JOIN v_canonical_members m ON m.quest_claim_id = r.quest_claim_id)),
+  -- canonical hub VIEW (R-019/R-020, DR-16: derived, identity = user/text/type)
+  ('hub view entries >= 6',               (SELECT count(*) >= 6 FROM v_canonical_claims)),
+  ('hub view covers every claim exactly once', (SELECT count(*) = 0 FROM claims c
+      WHERE (SELECT count(*) FROM v_canonical_claims v
+             WHERE v.user_id = c.user_id AND v.canonical_text = c.canonical_text
+               AND c.id = ANY (v.member_claim_ids)) <> 1)),
+  ('hub view: same-type reuse group across >= 2 quests', (SELECT count(*) >= 1 FROM v_canonical_claims
+      WHERE quest_count >= 2 AND NOT type_divergent)),
+  ('hub view: divergent-type pair coexists as distinct rows', (SELECT count(*) >= 2 FROM v_canonical_claims
+      WHERE type_divergent)),
+  ('hub view: divergence = >1 distinct non-null terminal type', (SELECT count(*) = 0 FROM v_canonical_claims v
+      WHERE v.type_divergent <> (SELECT count(*) > 1 FROM v_canonical_claims w
+                                 WHERE w.user_id = v.user_id
+                                   AND w.canonical_text = v.canonical_text
+                                   AND w.terminal_type IS NOT NULL))),
   -- lineage (R-021)
   ('from_corpus quest with inherited corpus', (SELECT count(*) >= 1 FROM quests q
       WHERE q.provenance_kind = 'from_corpus' AND q.source_quest_id IS NOT NULL
@@ -97,15 +96,25 @@ INSERT INTO ddl_asserts (check_name, ok) VALUES
       JOIN phases p ON p.id = e.verification_phase_id
       WHERE e.to_state = 'archived' AND p.kind = 'verification' AND p.state = 'complete'
         AND e.claims_at_archive IS NOT NULL AND e.frontier_open_at_archive = 0)),
-  -- report versioning (R-023/R-024)
-  ('report versions >= 2',                   (SELECT count(*) >= 2 FROM report_versions)),
+  -- report versioning (R-023/R-024) + fingerprint law (DR-17)
+  ('report versions >= 3',                   (SELECT count(*) >= 3 FROM report_versions)),
   ('re-synthesis: >= 2 distinct models',     (SELECT count(DISTINCT model) >= 2 FROM report_versions)),
   ('exactly one standing version per quest', (SELECT count(*) = 0 FROM (
       SELECT quest_id FROM report_versions GROUP BY quest_id
       HAVING count(*) FILTER (WHERE standing) <> 1) t)),
-  ('stale (non-standing) version >= 1',      (SELECT count(*) >= 1 FROM report_versions WHERE NOT standing)),
+  ('superseded (non-standing) version >= 1', (SELECT count(*) >= 1 FROM report_versions WHERE NOT standing)),
   ('every version pins a synthesis phase',   (SELECT count(*) = 0 FROM report_versions rv
       JOIN phases p ON p.id = rv.synthesis_phase_id WHERE p.kind <> 'synthesis')),
+  ('every version pins a hex64 quest fingerprint', (SELECT count(*) = 0 FROM report_versions
+      WHERE quest_fingerprint::text !~ '^[0-9a-f]{64}$')),
+  ('fingerprint drift: stale version inventory >= 1', (SELECT count(*) >= 1 FROM report_versions rv
+      JOIN v_quest_graph_fingerprint fp ON fp.quest_id = rv.quest_id
+      WHERE rv.quest_fingerprint <> fp.graph_fingerprint)),
+  ('fingerprint drift: clean pin (post-revisit version) >= 1', (SELECT count(*) >= 1 FROM report_versions rv
+      JOIN v_quest_graph_fingerprint fp ON fp.quest_id = rv.quest_id
+      WHERE rv.quest_fingerprint = fp.graph_fingerprint)),
+  ('post-archive rework legal: claim row on archived quest >= 1', (SELECT count(*) >= 1 FROM claims c
+      JOIN quests q ON q.id = c.quest_id WHERE q.state = 'archived')),
   -- citation binding (R-026/R-027)
   ('bound version with binding_pass >= 1',   (SELECT count(*) >= 1 FROM report_versions WHERE bound_at IS NOT NULL AND binding_pass IS NOT NULL)),
   ('citations >= 3',                         (SELECT count(*) >= 3 FROM report_citations)),
@@ -122,18 +131,16 @@ INSERT INTO ddl_asserts (check_name, ok) VALUES
       WHERE (SELECT count(*) FROM workspace_members m WHERE m.workspace_id = w.id) >= 2)),
   ('grants: public >= 2',                    (SELECT count(*) >= 2 FROM resource_grants WHERE is_public)),
   ('grants: user share >= 1',                (SELECT count(*) >= 1 FROM resource_grants WHERE grantee_user_id IS NOT NULL)),
-  ('grants: workspace share >= 2',           (SELECT count(*) >= 2 FROM resource_grants WHERE grantee_workspace_id IS NOT NULL)),
+  ('grants: workspace share >= 1',           (SELECT count(*) >= 1 FROM resource_grants WHERE grantee_workspace_id IS NOT NULL)),
   ('private-by-absence source exists',       (SELECT count(*) >= 1 FROM sources s
       WHERE NOT EXISTS (SELECT 1 FROM resource_grants g WHERE g.source_id = s.id))),
-  ('canonical claim shared via same mechanism', (SELECT count(*) >= 1 FROM resource_grants WHERE canonical_claim_id IS NOT NULL)),
   -- cross-consistency
-  ('archive counts equal live counts (no drift)', (SELECT count(*) = 0 FROM quest_lifecycle_events e
-      JOIN quests q ON q.id = e.quest_id
+  ('archive rows record fingerprints (DR-17)', (SELECT count(*) = 0 FROM quest_lifecycle_events e
       WHERE e.to_state = 'archived'
-        AND (e.claims_at_archive <> (SELECT count(*) FROM claims c WHERE c.quest_id = e.quest_id)
-          OR e.evidence_at_archive <> (SELECT count(*) FROM evidence v WHERE v.quest_id = e.quest_id)
-          OR e.frontier_open_at_archive <> (SELECT count(*) FROM frontier_entries f
-                                            WHERE f.quest_id = e.quest_id AND f.state = 'open')))),
+        AND (e.graph_fingerprint IS NULL OR e.graph_fingerprint::text !~ '^[0-9a-f]{64}$'))),
+  ('archive fingerprint drift DETECTED (post-archive rework)', (SELECT count(*) >= 1 FROM quest_lifecycle_events e
+      JOIN v_quest_graph_fingerprint fp ON fp.quest_id = e.quest_id
+      WHERE e.to_state = 'archived' AND e.graph_fingerprint <> fp.graph_fingerprint)),
   ('no bare claims after I02 (L6)',          (SELECT count(*) = 0 FROM v_claim_closure WHERE bare)),
   ('latest phase mass snapshot matches live (L4)', (SELECT count(*) = 0 FROM (
       SELECT DISTINCT ON (quest_id) quest_id, frontier_open, frontier_mass
