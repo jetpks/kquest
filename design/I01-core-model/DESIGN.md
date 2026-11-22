@@ -444,7 +444,10 @@ the PoC class-f storm, killed structurally; closed history does not block
 future re-entry rounds. Ordering law: `v_frontier_open` implements the PoC
 order `uncertainty*relevance DESC, claim ASC` (claim = `quest_seq`), with
 entry id as final tiebreak; the listing index
-`idx_frontier_open_order` matches it. Listing caps are applied by callers
+`idx_frontier_open_order` covers its leading keys (quest_id, u×r DESC);
+the `quest_seq`/id tiebreaks resolve in the view's small per-quest sort
+(prefix-matching index, not a full match — the third index key is
+`claim_id`, a random uuid). Listing caps are applied by callers
 (ENTRY 5) — ordering is owned by the schema layer (L15).
 
 ### 3.12 conflicts + conflict_sources (R-010)
@@ -559,7 +562,7 @@ defense-in-depth noted after the artifact. This is the AC5 map.
 | L3 | Independence = citation ancestry | PHASE-GATE: verification/synthesis independence audit runs Q2 | `canonical-queries.sql` Q2; ENTRY 7 (R-067) samples; reports cite the pairs |
 | L4 | Frontier as mass Σ(u×r); floors; re-entry transition law | PHASE-GATE: transition law reads `v_frontier_mass` and persisted `phases.frontier_mass` history | Views + phase snapshot columns here; transition table ENTRY 6 (R-056/R-059) |
 | L5 | Mutation-time constraints, refusals-that-teach, fused atomic forms, dedup guard | TOOL-TIME: the graph ops layer refuses at the call and teaches | ENTRY 5 (R-047/R-048). Schema carries the dedup guard structurally: `uq_claims_quest_canonical`, `uq_evidence_quest_span`, `uq_frontier_need` |
-| L6 | Closure contract (terminal ∨ derives_from ∨ open frontier); three-zeros; status shows exactly what the gate enforces | PHASE-GATE: three-zeros over `v_claim_closure` | `v_claim_closure` is the ONE view both status and gate read — no asymmetric validator (§3.17); gate wiring ENTRY 6 (R-063); status op parity ENTRY 5 (R-051) |
+| L6 | Closure contract (terminal ∨ derives_from ∨ open frontier; every closed claim named by ≥1 evidence); three-zeros; status shows exactly what the gate enforces | PHASE-GATE: three-zeros over `v_claim_closure`; the named-by-≥1-evidence arm is TOOL-TIME at fused evidence-edge creation (the atomic claim+evidence+edge form refuses evidence-free claims, ENTRY 5 R-047) with a PHASE-GATE sweep over `v_claim_closure.evidence_count = 0` as backstop | `v_claim_closure` is the ONE view both status and gate read — no asymmetric validator (§3.17); gate wiring ENTRY 6 (R-063); status op parity ENTRY 5 (R-051) |
 | L7 | Cold-boot resumability | SCHEMA: every mutation is a committed transaction over durable rows; no in-memory-only state exists | This DDL (all ops transactional); cold-boot session mechanics + kill/reap rehearsal ENTRY 4 (R-043) |
 | L8 | Transcript as audit log — every tool call verbatim | SCHEMA: `tool_calls` NOT NULL verbatim args/result, `(session_id, seq)` unique | This DDL; same-transaction write by the tool harness ENTRY 5; tripwire predicates over it ENTRY 7 (R-069) |
 | L9 | Budgets as steering (web caps, phase walls, spend caps) | TOOL-TIME + PHASE-GATE: caps read from quests columns; walls/timeouts from phase config | `quests` budget columns here; enforcement points ENTRY 6 (R-059 stop-rule catalog) |

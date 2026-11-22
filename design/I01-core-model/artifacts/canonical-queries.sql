@@ -77,6 +77,16 @@ SELECT count(*) AS l2_violation_count FROM q1_l2_violations;
 -- evidence pairs (a, b) that cite the SAME source where b hangs off a claim
 -- in a's claim-ancestry — i.e. not independent corroborations. The fixture
 -- pair (e1 on k2, e3 on k4) shares source s2 with k2 an ancestor of k4.
+-- Ancestry is directional (a claim is never its own descendant's
+-- descendant: no cycles), so each unordered evidence pair on an
+-- ancestor/descendant claim pair appears exactly once per direction —
+-- DISTINCT absorbs multi-path ancestry duplication. There is NO
+-- evidence-id ordering filter: requiring ancestor-evidence-id <
+-- descendant-evidence-id silently drops pairs whenever ids sort the
+-- other way (judge finding 1; regression pair e8-on-k1/e7-on-k4 in the
+-- seed has ancestor id > descendant id and MUST appear here). Reflexive
+-- depth-0 (same-claim) pairs match in both orientations; the id filter on
+-- that arm alone keeps exactly one row per unordered pair.
 CREATE TEMP TABLE q2_dependent_evidence AS
 WITH RECURSIVE ancestry (quest_id, claim_id, ancestor_id, depth) AS (
   SELECT quest_id, id, id, 0 FROM claims
@@ -92,11 +102,12 @@ SELECT DISTINCT ea.quest_id,
        an.depth AS ancestor_depth
 FROM evidence_edges ea
 JOIN evidence_edges eb
-  ON eb.quest_id = ea.quest_id AND eb.evidence_id < ea.evidence_id
+  ON eb.quest_id = ea.quest_id
 JOIN evidence eva ON eva.id = ea.evidence_id AND eva.quest_id = ea.quest_id
 JOIN evidence evb ON evb.id = eb.evidence_id AND evb.quest_id = eb.quest_id
                  AND evb.source_id = eva.source_id
-JOIN ancestry an ON an.claim_id = ea.claim_id AND an.ancestor_id = eb.claim_id;
+JOIN ancestry an ON an.claim_id = ea.claim_id AND an.ancestor_id = eb.claim_id
+                  AND (an.depth > 0 OR eb.evidence_id < ea.evidence_id);
 
 SELECT * FROM q2_dependent_evidence
 ORDER BY claim_id, ancestor_claim_id, evidence_a;

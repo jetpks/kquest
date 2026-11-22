@@ -67,7 +67,12 @@ surface for zero benefit.
 
 ## DR-03 — URL canonicalization rules for canonical_url
 
-**Status:** OPERATOR-RULING-NEEDED
+**Status:** DECIDED — operator ratified Option A (2026-11-22). Ratification
+record: `notes/ratification-20261122T1457-core-model.md` in the space.
+Caveat folded into the ruling: Option A sorts query parameters, which can
+itself merge pages where parameter order is semantic (rare; some APIs) —
+accepted; the tracking-param config list is the escape hatch if such a
+domain appears (drop sorting for that host rather than weaken the default).
 **Decision:** ship Option A (conservative + tracking-param strip) as the
 working default; `sources.url` preserves the URL as fetched so no
 information is lost and any later rule can re-derive from the row.
@@ -250,9 +255,12 @@ them); (c) mass on the frontier rows themselves (entry-level snapshotting)
 **Decision:** The one listing order is `uncertainty*relevance DESC,
 claim_seq ASC, entry_id ASC` (PoC `order: uncertainty*relevance DESC,
 claim ASC`, tiebreak made total). `v_frontier_open` owns it; partial index
-`idx_frontier_open_order` matches it. Callers (tool layer) apply caps.
+`idx_frontier_open_order` covers its leading keys (quest_id, u×r DESC); the
+`quest_seq`/id tiebreaks resolve in the view's per-quest sort (the index's
+third key is `claim_id`, a random uuid — prefix match, not a full match).
+Callers (tool layer) apply caps.
 **Rationale:** L15 demands principled ordering on every listing surface —
-principled means defined once; a view + matching index keeps every reader
+principled means defined once; a view + a prefix-covering index keeps every reader
 consistent and the order explainable in one place.
 **Alternatives considered:** (a) order in each caller's query — drift
 factory; (b) rank column maintained on write — derived data (L10 violation)

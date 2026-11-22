@@ -158,7 +158,7 @@ INSERT INTO quests
  '{"decompose":"glm-5.3","descent":"glm-5.3","synthesis":"glm-5.3","verification":"glm-5.3"}'::jsonb,
  '{}'::jsonb),
 ('b0000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000001',
- 'Momentum continuation quest (fixture, inherits corpus)', 'complete', 'from_corpus',
+ 'Momentum continuation quest (fixture, inherits corpus)', 'active', 'from_corpus',
  'b0000000-0000-4000-8000-000000000001',
  512, 20000000, 15.0000,
  '{"decompose":"glm-5.3","descent":"glm-5.3"}'::jsonb,
@@ -200,7 +200,15 @@ INSERT INTO phases
 ('d0000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-000000000002',
  'b0000000-0000-4000-8000-000000000003', 'decompose', 1, 1, 'complete',
  '2026-11-22T09:00:00+00', '2026-11-22T09:31:00+00', 2700,
- '{"summary":"fixture tenant-B decompose"}'::jsonb, 0, 0);
+ '{"summary":"fixture tenant-B decompose"}'::jsonb, 0, 0),
+-- quest B (from_corpus graft quest): decompose round grafted k4 as k11 with
+-- an open frontier need — quest stays active; closure of graft claims gets
+-- real semantics in ENTRY 2 (lineage), the seed models the legal mid-flight
+-- state (terminal ∨ derives ∨ OPEN frontier — k11 rides the third arm)
+('d0000000-0000-4000-8000-000000000004', '00000000-0000-4000-8000-000000000001',
+ 'b0000000-0000-4000-8000-000000000002', 'decompose', 1, 1, 'complete',
+ '2026-11-22T12:00:00+00', '2026-11-22T12:20:00+00', 2700,
+ '{"summary":"fixture from_corpus decompose: grafted k4 as k11, one open need"}'::jsonb, 1, 9);
 
 INSERT INTO sessions
   (id, user_id, quest_id, phase_id, mode, driver, model, transcript_blob_key, started_at, ended_at) VALUES
@@ -263,7 +271,8 @@ FROM (VALUES
  'The magnitude of cross-sectional momentum outside US equities is unknown.',
  NULL::text, NULL::text,
  NULL::uuid, 'e0000000-0000-4000-8000-000000000001'::uuid),
--- quest B graft: identical canonical text to k4 (Q4 dedup-candidate anchor)
+-- quest B graft: identical canonical text to k4 (Q4 dedup-candidate anchor);
+-- carries an OPEN frontier entry (judge finding 3) — not bare
 ('f0000000-0000-4000-8000-000000000011', '00000000-0000-4000-8000-000000000001'::uuid,
  'b0000000-0000-4000-8000-000000000002'::uuid, 1,
  'Momentum profits persist after controlling for market beta in the fixture literature.',
@@ -331,6 +340,20 @@ FROM (VALUES
   ('10000000-0000-4000-8000-000000000006'::uuid, 's2', 'b0000000-0000-4000-8000-000000000001'::uuid,
    $sp$Reversal at the one-month horizon partially offsets the gross spread$sp$,
    'short-horizon reversal trims the gross spread toward a modest net level',
+   'e0000000-0000-4000-8000-000000000001'::uuid),
+  -- e7: s1 definitions -> supports k4 (descendant side of the Q2
+  --     ordering-law regression pair: ancestor evidence e8 sorts AFTER
+  --     this row — the exact case the old ancestor-id<descendant-id join
+  --     dropped; judge finding 1 regression coverage)
+  ('10000000-0000-4000-8000-000000000007'::uuid, 's1', 'b0000000-0000-4000-8000-000000000001'::uuid,
+   $sp$A confidence interval for a coefficient is the estimate plus or minus the critical value times the standard error.$sp$,
+   'fixture span staged on the definitional source for Q2 ordering-law regression coverage',
+   'e0000000-0000-4000-8000-000000000001'::uuid),
+  -- e8: s1 definitions -> supports k1 (ancestor side of the same pair;
+  --     id 08 > 07 = descendant e7's id)
+  ('10000000-0000-4000-8000-000000000008'::uuid, 's1', 'b0000000-0000-4000-8000-000000000001'::uuid,
+   $sp$Under the null hypothesis of a zero coefficient the t-statistic converges in distribution to the standard normal.$sp$,
+   'null-hypothesis distribution of the t-statistic, same definitional source',
    'e0000000-0000-4000-8000-000000000001'::uuid)
 ) AS e(id, source_tag, quest_id, span_literal, reading, created_session_id)
 JOIN fixture_sources fs ON fs.tag = e.source_tag
@@ -356,7 +379,13 @@ INSERT INTO evidence_edges
  'supports', 'f0000000-0000-4000-8000-000000000005', 1),
 ('20000000-0000-4000-8000-000000000006', '00000000-0000-4000-8000-000000000001',
  'b0000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000006',
- 'supports', 'f0000000-0000-4000-8000-000000000005', 2);
+ 'supports', 'f0000000-0000-4000-8000-000000000005', 2),
+('20000000-0000-4000-8000-000000000007', '00000000-0000-4000-8000-000000000001',
+ 'b0000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000007',
+ 'supports', 'f0000000-0000-4000-8000-000000000004', 1),
+('20000000-0000-4000-8000-000000000008', '00000000-0000-4000-8000-000000000001',
+ 'b0000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000008',
+ 'supports', 'f0000000-0000-4000-8000-000000000001', 1);
 
 -- claim -> claim derivations (ordered)
 INSERT INTO claim_derivations
@@ -394,7 +423,14 @@ INSERT INTO frontier_entries
  'b0000000-0000-4000-8000-000000000001', 'f0000000-0000-4000-8000-000000000004',
  'regression evidence that momentum survives beta controls',
  4, 5, 'closed', 'd0000000-0000-4000-8000-000000000001',
- '2026-11-22T10:20:00+00', '2026-11-22T10:55:00+00', 'fetch');
+ '2026-11-22T10:20:00+00', '2026-11-22T10:55:00+00', 'fetch'),
+-- k11 (quest B graft): open need on the grafted claim — clears the bare
+-- state (judge finding 3); u×r = 3×3 = 9 matches phase d0...004's snapshot
+('40000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000001',
+ 'b0000000-0000-4000-8000-000000000002', 'f0000000-0000-4000-8000-000000000011',
+ 'independent corroboration of beta-controlled momentum persistence beyond the inherited corpus',
+ 3, 3, 'open', 'd0000000-0000-4000-8000-000000000004',
+ '2026-11-22T12:15:00+00', NULL, NULL);
 
 -- conflict: gross-vs-net divergence on k2 between s2 and s3
 INSERT INTO conflicts
