@@ -39,9 +39,15 @@ map.
 
 ## DR-02 — Worker process model: one quest worker per ACTIVE quest + one job worker
 
-**Status:** OPERATOR-RULING-NEEDED (genuine judgment: process count vs
-concurrency model affects ops, cost, and blast radius)
-**Decision (proposed):** TWO worker process classes. (1) The **job
+**Status:** DECIDED (operator ruling 2026-11-23: **A — for now, with a
+recorded REVISIT TRIGGER**)
+**Ruling (operator, recorded verbatim):** "A for now, but i want to
+revisit this later." → The per-active-quest worker model ships day one;
+the process-model question REOPENS at the operator's discretion (the
+natural trigger: enough concurrent active quests that process count or
+memory pressure becomes measurable — the record's option B/C tradeoffs
+stay live).
+**Decision:** TWO worker process classes. (1) The **job
 worker** — the adopted substrate shape (`bin/worker.rb`; async-job redis
 processor) — one process, dequeueing corpus pipeline jobs
 (fetch/chunk/embed) across all users. (2) The **quest worker** — one OS
@@ -251,10 +257,17 @@ architecture difference.
 
 ## DR-08 — Production process supervision: falcon service blocks vs containers vs OS-level units
 
-**Status:** OPERATOR-RULING-NEEDED (hosting choice the substrate
-explicitly left to each project: "bin/worker.rb — this template
-deliberately carries NO supervised/managed worker topology")
-**Decision (proposed):** Supervise BOTH worker classes as falcon
+**Status:** DECIDED (operator ruling 2026-11-23: **A**)
+**Ruling (operator, recorded verbatim):** "A but we should already have
+a job system bundled in hanami-base." → Confirmed A. The job half is
+NOT new machinery: the job worker IS the bundled hanami-base job
+system (config/providers/job_queue.rb + the async-job redis processor
++ bin/worker.rb) adopted as-is per D8. The operator's note is recorded
+as a SUBSTRATE expectation: if hanami-base is to carry a fuller
+managed job topology (supervision, retries, scheduling), that is
+hanami-base-space work, flagged to the build phase — kquest's design
+adopts what is bundled and adds no job machinery of its own.
+**Decision:** Supervise BOTH worker classes as falcon
 `service` blocks in `falcon.rb`, alongside the web service: the same
 supervisor, the same config file, restart semantics for free, and the
 `Async` reactor both workers already run on is falcon's native
