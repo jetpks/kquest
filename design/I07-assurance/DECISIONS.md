@@ -9,8 +9,9 @@ stop-rules.tsv byte-for-byte — DR-04).
 
 ## DR-01 — The three-failure-modes audit cadence
 
-**Status:** OPERATOR-RULING-NEEDED
-**Decision (proposed):** the three failure modes (quote-mining,
+**Status:** DECIDED (operator ruling 2026-11-22: **A** — every verification phase)
+**Ruling note:** ratified A; C remains the recorded additive later mode.
+**Decision:** the three failure modes (quote-mining,
 provenance ≠ truth, cherry-picking — §1.3 of DESIGN) run as a standing
 agenda at EVERY verification phase: path-checking + Q1V zero rows
 (mode-agnostic structure), stratified spot-checks (quote-mining),
@@ -37,8 +38,11 @@ exists to prevent.
 
 ## DR-02 — Spot-check sampling law (seed/size/stratification)
 
-**Status:** OPERATOR-RULING-NEEDED
-**Decision (proposed):** unit = one evidence node (re-read span_text in
+**Status:** DECIDED (operator ruling 2026-11-22: **A** — fixed n=20, seeded, stratified; MOVING TOWARD C)
+**Ruling note:** ratified A with the recorded direction: revisit toward
+risk-weighted (C) once refusal/evidence metrics accumulate real
+weights — exactly the record's recommendation.
+**Decision:** unit = one evidence node (re-read span_text in
 snapshot context vs the reading; confirm polarity follows); size = fixed
 n = 20 per verification phase; stratified across sources (no source
 contributes more than ⌈n/|S|⌉+1 picks) and across need bands; the seed +
@@ -107,8 +111,8 @@ keys, not a second hardcoded number.
 
 ## DR-05 — Blind-spot scope day one
 
-**Status:** OPERATOR-RULING-NEEDED
-**Decision (proposed):** day one ships the four SQL-expressible blind-spot
+**Status:** DECIDED (operator ruling 2026-11-22: **A** — the four SQL metrics; overhang deferred to cap telemetry)
+**Decision:** day one ships the four SQL-expressible blind-spot
 metrics as definitions over existing I01 views — unmined_citable
 (v_unmined_sources), fetched_never_cited, uncited_claims
 (v_claim_closure.evidence_count = 0), aging_open_needs (age-banded open
@@ -137,8 +141,13 @@ false-positive law.
 
 ## DR-06 — Ladder gate criteria (probe → smoke → partial → full)
 
-**Status:** OPERATOR-RULING-NEEDED
-**Decision (proposed):** gates per rung (DESIGN §7): probe = usable first
+**Status:** DECIDED (operator ruling 2026-11-22: **A — as an EVAL
+FRAMEWORK, not binding policy**)
+**Ruling (operator, recorded verbatim):** "this is really a runtime
+operator decision, not something we need to encode into policy. A works
+insofar as we need an eval framework, but it should not bind the
+operator."
+**Decision (amended to the ruled shape):** gates per rung (DESIGN §7): probe = usable first
 tool call + artifacts written + citation resolves (the frozen stage-1
 method, 900 s wall, spend capped); smoke = every staged source mined ≥1
 evidence + no GRAPH_INVALID loop + ctx peak under window (stage-2's
@@ -158,10 +167,15 @@ at most; full-quest carries synthesis/verification.
 - C — adding a formal APC/cache rung between smoke and partial (the
   stage-2 APC feasibility probe): attractive but it measures the SERVING
   stack, not the model — folded into smoke's evidence columns instead.
-**Recommendation:** A, with the ceiling values for refusal-rate and
-metabolism band left as config keys the operator tunes per domain (they
-are UNMEASURED as gates; the rung structure is the decision, the
-thresholds are calibration).
+**Post-ruling note:** A RATIFIED as the eval framework. The rungs
+EVALUATE and RECORD — they do not BIND: the routing rule ("model_config
+cites rung evidence; probe-only never routes; smoke routes to
+decompose-class at most; full-quest carries synthesis/verification") is
+the REVIEWABLE default the operator may override at runtime — an
+override is recorded (who/why, in the config row's provenance), never
+blocked. The ceiling values for refusal-rate and metabolism band stay
+config keys the operator tunes per domain (unmeasured as gates; the
+rung structure is the decision, the thresholds are calibration).
 **Rationale:** the ladder is admission control for the routing map —
 the one place a bad model can silently corrupt every quest it touches
 (v3's empty-completion tax and the 496 KB ceiling were both
@@ -192,9 +206,11 @@ rejected: tokens are not bytes and the ceiling deaths were BYTES.
 ## DR-08 — Spend attribution stays reporting-only (FM-17's enforcement
 half; the I03 DR-06 revisit trigger)
 
-**Status:** OPERATOR-RULING-NEEDED (judge F2: a frozen-grounds mandate —
-I06 §14 explicitly deferred the consequence-enforcement half HERE —
-cannot be closed as DECIDED-by-prior-ruling; the operator owns it)
+**Status:** DECIDED (operator ruling 2026-11-22: **A — reporting-only;
+the enforcement half re-pointed explicitly; consequences never bind the
+operator**)
+**Ruling (operator, recorded verbatim):** "A -- these should not bind
+the operator."
 **Options:**
 - **(A) Ratify reporting-only + re-point the enforcement half explicitly**
   — day one ships signals, not consequences; the enforcement half is

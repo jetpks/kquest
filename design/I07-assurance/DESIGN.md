@@ -309,9 +309,13 @@ dashboard. Options in the decision record.
 
 Shape from the PoC fleet-ladder (stage 1 + stage 2 notes): candidates
 earn routing eligibility rung by rung, and the routing config CITES the
-evidence (a model appears in `quests.model_config` for a phase kind only
-with a rung pass on record — I06 §7's seeder/closer profiles consume
-exactly this). Durable carrier (judge F8): the rung-pass record needs a
+evidence (a model's rung passes are ON RECORD and cited by its
+`quests.model_config` rows — I06 §7's seeder/closer profiles consume
+exactly this). Per the DR-06 ruling (2026-11-22): the ladder is an EVAL
+FRAMEWORK, not binding policy — the routing rule is the REVIEWABLE
+default; the operator may override at runtime, the override recorded
+(who/why in the config row's provenance), never blocked. Durable
+carrier (judge F8): the rung-pass record needs a
 home the rule can mechanically read — a `ladder_passes` table (model,
 rung, stack, date, evidence ref) is the natural shape, DEFERRED to
 ENTRY 8's schema map with the enforcement rule (model_config rows cite a
