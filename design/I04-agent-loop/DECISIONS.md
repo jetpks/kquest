@@ -365,6 +365,12 @@ everywhere the fix is behavioral (sliced reads, extract-as-you-read).
 **Alternatives considered:** a single global context budget knob —
 rejected: the 78%/5.1% split shows the lines are orthogonal (reads vs
 tools); one knob cannot teach and enforce at once.
+**Amendment (I05 ratification, operator 2026-11-22):** ONE exception to
+the all-advisory default is now ratified — the `read_slice` line ships
+mode=hard (I05 DR-04, judge F1): the refusal is itself the teaching
+mechanism (it names the slice form, destroys nothing), and its crossing
+is the silent 78%-class blowout. Every other budget line remains
+advisory-default per this record's Ruling.
 
 ## DR-10 — Subagent spawn discipline + band-survey codified
 

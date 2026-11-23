@@ -369,7 +369,9 @@ rule: phase_terminal_contract (ENTRY 6 phase contract; loop turn boundary) | que
 
 Three-zeros = the gate's closure verdict: `bare_claims=0
 unreferenced=0 dual_arm_claims=0` (all three over `v_claim_closure`);
-the decompose phase additionally requires `decompose_remaining=0`. Gate
+the decompose phase additionally requires `decompose_remaining=0`.
+CONFIRMED by operator 2026-11-22 (ratification note; the PoC's
+`violations` zero has no kquest equivalent — `bare` subsumes it). Gate
 WIRING (which phase checks which zero, transition law, mass floors) is
 ENTRY 6; the parity LAW (the fields above are exactly what any gate may
 sweep) is fixed here.

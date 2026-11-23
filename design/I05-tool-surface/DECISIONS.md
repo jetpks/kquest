@@ -109,10 +109,10 @@ container must exist and be taught by the coercion note.
 
 ## DR-04 — Sliced-read defaults: offset/limit values and the slice cap
 
-**Status:** OPERATOR-RULING-NEEDED (values DECIDED; the default MODE of
-the read_slice line — hard vs all-advisory per the I04 DR-09 ruling —
-was excepted by the designer without a flag; judge F1 turned it into
-this ruling item)
+**Status:** DECIDED (operator ruling 2026-11-22: **A — keep the hard
+default for the read_slice line only**, formally amending the I04 DR-09
+all-advisory default for this single line; every other budget line stays
+advisory-default. The judge-F1 flag question is resolved by this ruling.)
 **Decision:** `source_read` takes `offset` (1-based line) and `limit`
 (lines), DEFAULT limit 60 lines, hard cap 8,000 chars per slice
 (`read_slice_cap_chars`, carried from I04 FM-22); a read that would
@@ -218,10 +218,17 @@ changes without code edits; (c) nesting to depth 2 — rejected: no
 measured need, doubles the wedge/accounting surface (I04 DR-08
 alternatives, adopted).
 
-## DR-07 — Dedup-by-construction wiring at node_add (thresholds flagged for ruling)
+## DR-07 — Dedup-by-construction wiring at node_add (thresholds ruled A)
 
-**Status:** OPERATOR-RULING-NEEDED (wiring DECIDED; the near-leg
-threshold VALUES need the operator)
+**Status:** DECIDED (operator ruling 2026-11-22: **A — ship k=5 / cosine ≥ 0.6
+defaults + a mandatory recalibration task against the real registry
+model as a BLOCKING implementation-arc entry**)
+**Ruling note:** the values gate only candidate SURFACING (near-dups never
+refuse, never auto-merge): over-surfacing is a teach-note nuisance;
+under-surfacing loses the I02 DR-16 growth-slot data. The recalibration
+task is a blocking arc entry — k=5/0.6 are provisional until calibrated
+against the real registry model (I03 DR-15: synthetic fixtures prove
+machinery, never model quality).
 **Decision:** Wiring (DECIDED): claim creation (`node_add` label=claim)
 runs the I03 dedup candidate check BEFORE the write — exact leg
 (canonical-text byte-equality, the `uq_claims_quest_canonical`
