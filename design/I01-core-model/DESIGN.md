@@ -205,6 +205,10 @@ erDiagram
     integer input_tokens
     integer output_tokens
     numeric cost_usd "nullable"
+    integer cache_read_tokens "default 0 (DR-22)"
+    integer cache_write_tokens "default 0 (DR-22)"
+    integer reasoning_tokens "default 0 (DR-22)"
+    integer seed "nullable (DR-22, L14 audit)"
   }
 
   users ||--o{ sources : "fetches once per user"
@@ -503,7 +507,13 @@ over this table.
 
 One row per LLM/embedding API call (DR-14): `kind ∈ {llm, embedding}`,
 `model`, `input_tokens`/`output_tokens` ≥ 0, `cost_usd` numeric(12,6)
-nullable (NULL = local/free — seeded example present). The chain
+nullable (NULL = local/free — seeded example present). **AMENDED
+2026-11-22 (DR-22, I04 DR-12, operator-ruled):** four additive
+columns — `cache_read_tokens`/`cache_write_tokens`/`reasoning_tokens`
+(integer NOT NULL DEFAULT 0, CHECK ≥ 0) and `seed` (integer NULL,
+CHECK ≥ 0) — recording what the provider actually returns (providers
+differ in which keys they return; absent keys stay default) and the
+served seed per call (L14 audit). The chain
 session→phase→quest→user is total and pinned: `fk_usage_session` requires
 the session to belong to the row's phase, `fk_usage_phase` the phase to the
 quest, `fk_usage_quest` the quest to the user (probe C22). Budget
@@ -703,7 +713,7 @@ stop rules/budgets; DR-20):
 | R-011 | DESIGNED | §3.3 quests (state, budgets, provenance, model/process config) | routing map contents → ENTRY 6 |
 | R-012 | DESIGNED | §3.13 phases (kinds, rounds, attempts, walls, boundary snapshots) | — |
 | R-013 | DESIGNED | §3.14/§3.15 sessions + tool_calls (L8 verbatim; DR-13) | pause/cold-boot mechanics → ENTRY 4 |
-| R-014 | DESIGNED | §3.16 usage_events (D10 chain pinned; DR-14) | — |
+| R-014 | DESIGNED | §3.16 usage_events (D10 chain pinned; DR-14; DR-22 provider-token detail + seed columns, amended 2026-11-22) | — |
 | R-015 | DESIGNED | §6 placement map (D8) | — |
 | R-016 | DESIGNED | §8 + artifacts/canonical-queries.sql (four recursive CTEs, non-empty asserted) | storage-seam wrapper → ENTRY 8 |
 | R-017 | DESIGNED | artifacts/schema.sql (runs clean on scratch PG 18 + pgvector) | — |

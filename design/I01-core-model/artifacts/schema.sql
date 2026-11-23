@@ -530,6 +530,18 @@ CREATE TABLE usage_events (
                 CHECK (char_length(btrim(model)) > 0),
   input_tokens  integer NOT NULL CONSTRAINT ck_usage_input CHECK (input_tokens >= 0),
   output_tokens integer NOT NULL CONSTRAINT ck_usage_output CHECK (output_tokens >= 0),
+  -- AMENDED 2026-11-22 (I04 DR-12, operator ruling "a amend as proposed"):
+  -- provider-token detail columns. Providers differ in which keys they
+  -- return (the fast-completions dialect system exists for exactly that)
+  -- so all four default 0/NULL and the dialect layer fills what the
+  -- provider actually returns; absent keys stay default.
+  cache_read_tokens  integer NOT NULL DEFAULT 0 CONSTRAINT ck_usage_cache_read
+                     CHECK (cache_read_tokens >= 0),
+  cache_write_tokens integer NOT NULL DEFAULT 0 CONSTRAINT ck_usage_cache_write
+                     CHECK (cache_write_tokens >= 0),
+  reasoning_tokens  integer NOT NULL DEFAULT 0 CONSTRAINT ck_usage_reasoning
+                     CHECK (reasoning_tokens >= 0),
+  seed              integer CONSTRAINT ck_usage_seed CHECK (seed IS NULL OR seed >= 0),
   cost_usd      numeric(12,6) CONSTRAINT ck_usage_cost CHECK (cost_usd IS NULL OR cost_usd >= 0),
   created_at    timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT fk_usage_user FOREIGN KEY (user_id) REFERENCES users (id),

@@ -20,7 +20,7 @@ dialect DECLARATION over the gem's closed 14-key vocabulary (`:zai`,
 unknown keys/values raise `ArgumentError` at declaration time, so a
 dialect defect fails at boot, not on the wire). No vendor SDK is linked,
 ever; a cloud API is admitted only if it speaks the OpenAI wire or a
-declared dialect of it. ProviderSeam is the only component that sees
+declared dialect of it. ProviderDesk is the only component that sees
 `base_url`/`api_key_ref`; the loop below it addresses models by config,
 never by URL.
 **Rationale:** D1 ratified the posture; the gem's dialects-as-data design
@@ -168,19 +168,27 @@ lean; (c) heartbeat column on sessions (prior-law amendment) — rejected
 as unnecessary: worker liveness is a job-runner fact, and the reaper plus
 the registry cover crash detection without new schema.
 
-## DR-06 — Transcript-ceiling policy: refuse vs truncate vs swap (size-correlated empty completions)
+## DR-06 — Transcript-ceiling policy: a RUNTIME operator decision — the loop refuses, reports, and presents options (size-correlated empty completions)
 
-**Status:** OPERATOR-RULING-NEEDED
-**Decision:** The ceiling is a real, measured provider property (deaths at
+**Status:** DECIDED (operator ruling 2026-11-22: runtime decision, not up-front policy)
+**Ruling (operator, recorded verbatim):** "this is a runtime decision, not
+one we make up front and cast into policy. the operator decides, which i
+suppose is refuse-and-report with a & b as options."
+**Decision (the pause-and-present protocol):** At the hard ceiling the
+loop REFUSES new turns, REPORTS the state (holder, size, provider,
+ceiling), and PRESENTS the options below — the OPERATOR picks at
+runtime. No default policy is cast; A and B are the presented menu, C
+(the refusal) is what happens until the operator chooses. The loop-side
+invariants hold regardless: The ceiling is a real, measured provider property (deaths at
 496,294 B and 496,578 B, 284 B apart, both empty-completion —
 arc-run-20261122T-llm-trading-v3-launch.md §Post-resume ground truth +
 size-ceiling evidence). It is CONFIG per provider row
 (`transcript_ceiling_warn_bytes` default 450,000 — the PoC's SIZE-CEILING
 tripwire value; `transcript_ceiling_hard_bytes` default 496,000). WHAT
-happens at the thresholds needs an operator ruling (below); the loop-side
-invariants hold regardless: early warning refuses NEW corpus ingestion and
+early warning refuses NEW corpus ingestion and
 banks at the next turn boundary; the hard ceiling ends the session at a
-boundary; a live transcript is NEVER truncated mid-flight (L8 audit
+boundary — then the operator decides; a live transcript is NEVER
+truncated mid-flight (L8 audit
 integrity); a successor session cold-boots from durable state, optionally
 compacted.
 **Rationale:** The PoC's own ceiling episode ended in exactly this ruling
@@ -194,7 +202,7 @@ pause-reconfigure-resume. This is a routing/economics call (local churn
 tax vs remote spend), not a loop-mechanics call, so it stays with the
 operator; DR-06 fixes the detection and the never-truncate-mid-flight law
 now.
-**Options:**
+**Options (the runtime menu the loop presents):**
 - **(A) Swap at the wall (the PoC's executed ruling):** when a provider's
   hard ceiling is hit, pause and route the remainder to a large-window
   model (per ENTRY 6 routing config). Clean, proven; costs remote spend
@@ -208,10 +216,12 @@ now.
   pauses for operator disposition with a loud condition. Simplest; risks
   reportless quests (the PoC's reportless-stop failure mode) unless the
   ENTRY 6 finisher discipline catches it.
-**Recommendation:** (A) as the default policy, with (B)'s warn-threshold
-ingestion-refusal (already law) making (A) rare; revisit (B) only if a
-future local engine makes remote spend unacceptable. The PoC's executed
-ruling is the only option with live evidence.
+**Post-ruling note:** the pre-ruling recommendation of (A) as a fixed
+default is SUPERSEDED — the operator explicitly declined to cast policy
+up front (see Ruling above). The loop's contract is the pause-and-
+present protocol; (A) remains the only option with live PoC evidence
+(it is what the operator chose when the ceiling actually hit), so it is
+presented first on the menu.
 **Alternatives considered:** mid-flight truncation — rejected outright (L8:
 the transcript is the audit log; silently shrinking it under a live model
 is fabrication-adjacent); "retryable empty-completion-at-size" alone —
@@ -224,7 +234,7 @@ like #4/#5).
 **Status:** DECIDED (L14 law; the gem patch is the recorded consequence)
 **Decision:** Every completion request carries a seed drawn fresh at
 random per request, fill-if-absent: if the caller supplies an explicit
-seed, it wins (deterministic replay/tooling); otherwise ProviderSeam
+seed, it wins (deterministic replay/tooling); otherwise ProviderDesk
 injects a fresh random Integer. EVERY retry carries a fresh seed (an
 identical body+seed re-attempt is the FM-03 replay mechanism — made
 structurally impossible, not merely discouraged). The dedup guard
@@ -248,8 +258,8 @@ Chat path):** `Chat#step` calls `@client.stream` with a FIXED kwarg set
 (model/messages/instructions/tools/thinking/max_tokens — no temperature,
 no seed; lib/fast/completions/chat.rb), so a Client-level kwarg never
 reaches the wire through the mandated turn primitive. kquest's
-ProviderSeam — which already constructs the Client (DESIGN §2.3) — wraps
-it in a **ProviderSeam-owned Client decorator** (a subclass whose
+ProviderDesk — which already constructs the Client (DESIGN §2.3) — wraps
+it in a **ProviderDesk-owned Client decorator** (a subclass whose
 `#stream` fill-injects the per-request seed before delegating; nil →
 random Integer, explicit seed wins). No Chat surface is proposed — the
 Chat owns conversations, not sampling. Mechanism choice flagged for
@@ -309,12 +319,21 @@ subsets — rejected: config data survives quest-local law changes without
 code edits (the SKILL-law pattern); (c) allow nesting to depth 2 —
 rejected: no measured need, doubles the wedge/accounting surface.
 
-## DR-09 — Context budget: hard vs advisory lines (the 78% lesson)
+## DR-09 — Context budget: all lines advisory by default, per-line toggleable to hard, values adjustable (the 78% lesson)
 
-**Status:** OPERATOR-RULING-NEEDED
-**Decision:** The context-budget policy lines are split hard/advisory, but
-WHICH lines are hard is an operator economics call (below). Loop-side
-facts this record fixes: the transcript ceiling line is per-provider
+**Status:** DECIDED (operator ruling 2026-11-22: all-advisory by default,
+toggleable)
+**Ruling (operator, recorded verbatim):** "this too is a runtime decision.
+these need to be all-advisory by default with the ability to toggle them
+to hard and to adjust the values."
+**Decision (lines as config data):** every context-budget line is per-line
+CONFIG DATA — {scope, value, mode ∈ advisory|hard} — with mode DEFAULT
+ADVISORY and every value adjustable; any line can be flipped hard at
+runtime by the operator. When a line is hard, enforcement is at TURN
+BOUNDARIES (refuse/bank/route), never mid-turn; when advisory, by
+teaching (refusals and caps that name the legal alternative), never by
+silent truncation. The pre-ruling mixed-hard split is SUPERSEDED.
+Loop-side facts this record fixes: the transcript ceiling line is per-provider
 config (DR-06); whatever is ruled HARD is enforced at TURN BOUNDARIES
 (refuse/bank/route), never mid-turn; whatever is ruled ADVISORY is enforced
 by teaching (refusals and caps that name the legal alternative), never by

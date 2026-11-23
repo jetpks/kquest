@@ -436,3 +436,29 @@ inheriting a proxy artifact as provenance.
 detail, add when a consumer exists (ENTRY 3 pipeline); (b) published_at
 NOT NULL — most pages do not state it honestly or at all; forcing it
 invites fabrication.
+
+## DR-22 — usage_events provider-token detail columns (AMENDMENT, ruled by operator 2026-11-22)
+
+**Status:** DECIDED (I04 DR-12 proposal; operator ruling 2026-11-22:
+"a amend as proposed")
+**Decision (the applied patch):** usage_events gains four additive
+columns — `cache_read_tokens`, `cache_write_tokens`, `reasoning_tokens`
+(integer NOT NULL DEFAULT 0, CHECK ≥ 0) and `seed` (integer NULL, CHECK
+≥ 0). The fast-completions gem's Usage object already carries all of
+these values at the call site that writes the row (I04 R-046 spend
+recording); without them, cache-wall measurability (I04 FM-24) and
+L14 seed audit depend on fragile derivations.
+**Rationale:** the columns make the ledger honest about what providers
+actually charge for (cache reads/writes, reasoning) and make every
+served seed mechanically auditable per call.
+**Operator caveat, recorded verbatim:** "just know that not all
+providers are going to return exactly those keys. they all differ which
+is why we had to make a whole dialect system in fast-completions." →
+All four columns default 0/NULL; the dialect layer fills what the
+provider returns; absent keys stay default (the columns record FACTS,
+not obligations).
+**Alternatives considered:** deriving cache/reasoning splits
+post-hoc from raw wire logs — rejected: the gem discards unused keys
+at parse time, so the values are either recorded at the call site or
+lost; a separate usage_detail table — rejected: four scalars do not
+justify a join.

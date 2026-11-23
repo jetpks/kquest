@@ -170,6 +170,16 @@ probe "C16 usage row with negative input tokens (D10 ledger)" \
   "INSERT INTO usage_events (user_id, quest_id, phase_id, session_id, kind, model, input_tokens, output_tokens)
    VALUES ('$BOB', '$QC', '$PQC1', '$SB', 'llm', 'qwen3.8-flash-next', -5, 10);"
 
+probe "C31 negative cache_read_tokens (DR-22 provider-token detail columns)" \
+  "ck_usage_cache_read" \
+  "INSERT INTO usage_events (user_id, quest_id, phase_id, session_id, kind, model, input_tokens, output_tokens, cache_read_tokens)
+   VALUES ('$BOB', '$QC', '$PQC1', '$SB', 'llm', 'qwen3.8-flash-next', 10, 10, -5);"
+
+probe "C32 negative seed (DR-22 L14 audit column)" \
+  "ck_usage_seed" \
+  "INSERT INTO usage_events (user_id, quest_id, phase_id, session_id, kind, model, input_tokens, output_tokens, seed)
+   VALUES ('$BOB', '$QC', '$PQC1', '$SB', 'llm', 'qwen3.8-flash-next', 10, 10, -1);"
+
 probe "C17 chunk offset beyond snapshot size (L1 offsets law)" \
   "ck_chunks_span_bounded" \
   "INSERT INTO chunks (source_id, user_id, strategy_id, ordinal, text, char_start, char_end, snapshot_char_count, source_anchorable)

@@ -114,7 +114,7 @@ and vice versa (machine-checked; AC4).
 
 ```components
 LoopDriver
-ProviderSeam
+ProviderDesk
 RetryGovernor
 ToolHarness
 TranscriptLedger
@@ -129,7 +129,7 @@ StreamWatch
 flowchart TD
   SS[SessionSupervisor<br/>launch gate / reaper / pause / cold-boot]
   LD[LoopDriver<br/>turn cycle + outcome classification]
-  PS[ProviderSeam<br/>client + model + dialect + seed]
+  PS[ProviderDesk<br/>client + model + dialect + seed]
   RG[RetryGovernor<br/>failure-table executor]
   TH[ToolHarness<br/>tool registration + audit + deadline]
   TL[TranscriptLedger<br/>L8 verbatim transcript + tool_calls rows]
@@ -159,7 +159,7 @@ flowchart TD
 |---|---|---|
 | `SessionSupervisor` | quest-scoped session lifecycle: launch gate (one-writer, D5), cold-boot protocol (L7), pause delivery, reaper of orphaned sessions, orchestrator-vs-operator launch modes | R-043 |
 | `LoopDriver` | the turn cycle: context assembly hand-off, `Chat#step` invocation, outcome classification (incl. empty completion), terminal conditions from the phase contract, turn-boundary checks (budgets, pause flag, ceilings) | R-039/R-040 |
-| `ProviderSeam` | the ONLY component that knows providers: constructs `Client`/`Model`/dialect declarations from provider config rows — and wraps the Client in a ProviderSeam-owned DECORATOR whose `#stream` fill-injects the per-request seed (judge F1: `Chat#step` calls `#stream` with a fixed kwarg set, so a bare kwarg is dead code on the Chat path); per-provider ceilings and cache-wall values; model swap at pause | R-038, R-041 |
+| `ProviderDesk` | the ONLY component that knows providers: constructs `Client`/`Model`/dialect declarations from provider config rows — and wraps the Client in a ProviderDesk-owned DECORATOR whose `#stream` fill-injects the per-request seed (judge F1: `Chat#step` calls `#stream` with a fixed kwarg set, so a bare kwarg is dead code on the Chat path); per-provider ceilings and cache-wall values; model swap at pause | R-038, R-041 |
 | `RetryGovernor` | executes `failure-modes.tsv`: signature → class → required behavior → bound; jittered backoff above the gem's immediate retry; the escalation ladder (retry → bank session → end phase attempt → pause quest) | R-039, R-045 |
 | `ToolHarness` | registers ENTRY 5 tool classes into the gem's `Chat`; wraps every `execute` with the same-transaction audit write, per-call deadline watchdog (wedge guard), result-size caps, budget guards, and subagent profile restrictions | R-039, R-044 |
 | `TranscriptLedger` | L8: appends the verbatim session transcript to `sessions/<uuid>/transcript.jsonl` (object storage) and writes `tool_calls` rows in the same transaction as the mutation; persists salvaged partials as audit | L8, R-013 |
@@ -177,7 +177,7 @@ LoopDriver runs turns inside a session until a terminal condition:
 SessionSupervisor.launch(quest, phase)         # gate, session row, cold boot
 repeat:
   context := ContextBudgeter.assemble(phase_contract)   # prompt text from ENTRY 6
-  outcome := ProviderSeam.step(chat, context)           # Chat#step, tools registered
+  outcome := ProviderDesk.step(chat, context)           # Chat#step, tools registered
     on event:      TranscriptLedger.append + StreamWatch.observe
     on tool batch:  ToolHarness wraps (audit, deadline, caps, guards)
   classify(outcome):
@@ -197,7 +197,7 @@ subagents, and everything in the failure table.
 
 ### 2.3 Transport posture
 
-- One `Client` per provider config row, built by ProviderSeam; one `Chat`
+- One `Client` per provider config row, built by ProviderDesk; one `Chat`
   per session; the reactor is the caller's (fiber-native law).
 - `Chat#step` is the turn primitive; `Chat#cancel` is the pause primitive
   (§5.2); `Client#raw_stream` is NOT used by the loop — it is the
@@ -209,7 +209,7 @@ subagents, and everything in the failure table.
   `ttfb_timeout`/`inactivity_timeout` overrides where prefill-scale waits
   are first-class (the gem documents 1400 s-class values as legitimate).
 - Session-affinity headers: the gem sends them per-dialect when a
-  `session_id` is supplied; ProviderSeam passes the kquest session id —
+  `session_id` is supplied; ProviderDesk passes the kquest session id —
   affinity helps the provider's prefix cache, which is the cache-wall
   economics lever (§7).
 
@@ -534,7 +534,11 @@ ingestion via full-file `read`s is." Two aggravators: cold-boot re-reads
 (~90K chars re-loaded that a predecessor had already read) and
 read-then-extract ordering (S1 loaded ~122K chars before its first write).
 
-Policy (hard-vs-advisory split in DECISIONS DR-09):
+Policy (DECISIONS DR-09 as Ruled 2026-11-22: every line is per-line
+config data — {scope, value, mode ∈ advisory|hard} — ADVISORY BY
+DEFAULT, toggleable to hard per line, values adjustable at runtime;
+the pre-ruling mixed-hard split is superseded. Hard lines enforce at
+TURN BOUNDARIES; advisory lines teach — never silently truncate):
 
 1. **Sliced reads default** (FM-22): corpus reads go through
    offset/limit slices, capped at `read_slice_cap_chars` (default 8,000);
@@ -551,10 +555,14 @@ Policy (hard-vs-advisory split in DECISIONS DR-09):
 4. **Cold-boot economy**: successor sessions re-derive state from
    store-backed reads, never re-read what a predecessor extracted (the
    export/stale-view lesson — the store, not files, carries the resume).
-5. **Transcript ceilings per provider** (FM-02, DR-06): measured cluster
+5. **Transcript ceilings per provider** (FM-02, DR-06 as ruled: a RUNTIME
+   operator decision): measured cluster
    496,294 / 496,578 B (284 B apart) — the ceiling is a PROVIDER property,
    config per row: warn at 450,000 B (the PoC's SIZE-CEILING tripwire
-   value), hard at 496,000 B default.
+   value), hard at 496,000 B default. At the hard ceiling the loop
+   REFUSES new turns, REPORTS, and PRESENTS the menu (A swap-at-the-
+   wall, B compact-and-continue) — the operator decides at runtime; no
+   policy is cast up front.
 6. **Prefix-cache economics** (FM-24): within a session the prompt prefix
    stays APPEND-ONLY (stable prefix = cache hits); the gem's session
    affinity headers are sent when the dialect supports them. Measured
@@ -593,7 +601,7 @@ Policy (hard-vs-advisory split in DECISIONS DR-09):
   `Client#stream` + `Protocol.build_request`, nil = omit; kquest fills a
   random Integer), destination implementation arc entry 0. Delivery path
   (judge F1): `Chat#step` calls `#stream` with a fixed kwarg set, so the
-  seed reaches the wire through a ProviderSeam-owned Client DECORATOR
+  seed reaches the wire through a ProviderDesk-owned Client DECORATOR
   whose `#stream` fill-injects it before delegating (§2.3; no Chat
   surface — mechanism choice flagged for ratification: decorator vs a
   widened Chat-level gem patch). Interim
@@ -647,7 +655,7 @@ I03 §11 catalog.
 
 | id | invariant | primary enforcement | implementing artifact / destination |
 |---|---|---|---|
-| E-SEED | every completion request carries a non-pinned seed (fill-if-absent, explicit wins); every RETRY carries a fresh seed | LOOP: ProviderSeam injects; RetryGovernor refuses identical (body, seed) re-attempts | this doc §8; DR-07 gem patch → implementation arc entry 0; dedup guard = I01 schema (L14 half) |
+| E-SEED | every completion request carries a non-pinned seed (fill-if-absent, explicit wins); every RETRY carries a fresh seed | LOOP: ProviderDesk injects; RetryGovernor refuses identical (body, seed) re-attempts | this doc §8; DR-07 gem patch → implementation arc entry 0; dedup guard = I01 schema (L14 half) |
 | E-SPEND | every API call lands a usage_events row at the call site — success, failure, salvage, zero-token | LOOP: SpendRecorder sink (gem terminal invariant, structural) | §9, FM-25; embed site = I03 J-SPEND schema law + FM-23 |
 | E-AUDIT | every tool call lands a verbatim tool_calls row in the same transaction as the mutation; salvaged partials persist as audit | LOOP: ToolHarness + TranscriptLedger (transaction shape = ENTRY 5) | §2.4, FM-13/FM-15; I01 §3.15 schema |
 | E-1W | one active writer per quest | LOOP: SessionSupervisor launch gate + reaper + ToolHarness write-guard | §5.3, FM-16; home pinned by I01 DR-12 (no schema constraint — L7) |
@@ -657,7 +665,7 @@ I03 §11 catalog.
 | E-WEDGE | every tool call, subagent run, and request runs under a deadline with bounded escalation (pgroup kill where subprocesses exist) — no unbounded wait exists in the loop | LOOP: ToolHarness watchdog (I17 pattern: TERM→grace→liveness→KILL, worst case timeout+~17 s) | §2.5, FM-04/FM-20; R-039 |
 | E-SPAWN | subagent spawns return immediately; verification is a separate run-registry query; no result ≠ no process | LOOP: SubagentRunner spawn discipline | §6, FM-20; run registry = engine runtime state (ENTRY 8 worker topology hosts it) |
 | E-RESTRICT | subagent tool surfaces are named profile restrictions of the parent's; no recursion (a subagent cannot spawn subagents) | LOOP: SubagentRunner profile gate (ToolHarness enforces the registered surface) | §6, DR-08, FM-12 |
-| E-PROTO | dialects are declarations over a closed vocabulary; unknown key/value fails at boot; a wire-level dialect rejection is terminal, never silently translated | LOOP: ProviderSeam boot-time declaration (gem raises ArgumentError) | §3, FM-10; gem `docs/reference/dialects.md` |
+| E-PROTO | dialects are declarations over a closed vocabulary; unknown key/value fails at boot; a wire-level dialect rejection is terminal, never silently translated | LOOP: ProviderDesk boot-time declaration (gem raises ArgumentError) | §3, FM-10; gem `docs/reference/dialects.md` |
 | E-NOECHO | prompts carry no model/config identity strings; identity lives in audit columns only | LOOP: prompt assembly (ENTRY 6 contract) + SessionSupervisor boot config read; audit columns are the identity source | §5.5; `sessions.model`/`usage_events.model` (I01) |
 
 ## 11. Traceability — R-038–R-046 (machine-checked by check-coverage.sh)
