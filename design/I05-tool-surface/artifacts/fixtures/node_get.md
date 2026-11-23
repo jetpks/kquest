@@ -1,0 +1,17 @@
+## node_get
+
+One node by K-alias or urn, with its in/out edges and field values.
+
+### canonical
+
+```json
+{"node": "K1"}
+```
+
+### refusal: unknown-node
+
+```
+REFUSAL: UNKNOWN-NODE: <id> does not exist in this quest — resolve by K-alias or urn (kb:claim:…); if you meant a claim not yet created: create it first (node_add label=claim), re-submit, or wire later with edge_add
+```
+
+EVIDENCE: /Users/eric/architect/spaces/20261110-knowledge-builder/notes/2026-11-17-arc-decompose-review.md §Q6.1
