@@ -441,7 +441,7 @@ invites fabrication.
 
 **Status:** DECIDED (I04 DR-12 proposal; operator ruling 2026-11-22:
 "a amend as proposed")
-**Decision (the applied patch):** usage_events gains four additive
+**Decision:** (the applied patch) usage_events gains four additive
 columns — `cache_read_tokens`, `cache_write_tokens`, `reasoning_tokens`
 (integer NOT NULL DEFAULT 0, CHECK ≥ 0) and `seed` (integer NULL, CHECK
 ≥ 0). The fast-completions gem's Usage object already carries all of

@@ -12,7 +12,7 @@
 #      OPERATOR-RULING-NEEDED records carry Options + Recommendation; the six
 #      REQUIRED records are present (pause mechanics, one-writer enforcement
 #      point, transcript-ceiling policy, seed default, subagent tool-surface
-#      restriction, context budget hard vs advisory).
+#      restriction, context budget advisory by default).
 #   3. Architecture <-> handling-table parity (AC4): every component named in
 #      DESIGN.md's component registry (the fenced `components` block in the
 #      architecture section) appears in failure-modes.tsv's `destination`
@@ -145,7 +145,7 @@ else
   for topic in "pause mechanics:Pause" "one-writer enforcement point:one-writer" \
                "transcript-ceiling policy:transcript-ceiling" "seed default:seed default" \
                "subagent tool-surface restriction:subagent tool-surface" \
-               "context budget hard vs advisory:hard vs advisory"; do
+               "context budget advisory by default:advisory by default"; do
     name="${topic%%:*}"; token="${topic#*:}"
     if grep -i -q -- "$token" "$WORK/headers"; then
       pass "required record present: $name (header token '$token')"
