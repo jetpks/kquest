@@ -1,0 +1,144 @@
+prior_artifact	i08_consumer	consumer_kind
+I01 schema.sql users	slices/quest — the authenticated identity every domain row tenancy-pins	slice
+I01 schema.sql sources	slices/corpus — content-addressed URNs; citable/agenda role law	slice
+I01 schema.sql quests	slices/quest — the hermetic build unit; budget + config columns live here	slice
+I01 schema.sql quest_sources	slices/corpus — staged membership incl. agenda docs	slice
+I01 schema.sql chunk_strategies	slices/corpus — re-chunk = a new strategy generation, old retained	slice
+I01 schema.sql chunks	slices/retrieval — the embed targets + the FTS leg (search_tsv)	slice
+I01 schema.sql phases	quest view — the phase history panel + attempt accounting	ui-surface
+I01 schema.sql sessions	session.state — the lifecycle row mirrored per event	sse-event
+I01 schema.sql claims	slices/graph — node surfaces + closure status per node	slice
+I01 schema.sql evidence	slices/graph — the verbatim-span rows (L1 offsets law)	slice
+I01 schema.sql evidence_edges	slices/graph — ordered typed relation rows	slice
+I01 schema.sql claim_derivations	slices/graph — the derives_from structure the path queries walk	slice
+I01 schema.sql frontier_entries	frontier inspector — the scored queue: open/total, closure classes, aging	ui-surface
+I01 schema.sql conflicts	graph browser — the courtroom docket + resolution hypotheses	ui-surface
+I01 schema.sql conflict_sources	graph browser — at least two distinct citable rows per ledger entry by construction	ui-surface
+I01 schema.sql tool_calls	tool.event — the verbatim audit row mirrored per call (the row is the audit; the event is a projection)	sse-event
+I01 schema.sql usage_events	spend.tick — the D10 ledger row mirrored per call	sse-event
+I01 schema.sql v_unmined_sources	phase runner — the decompose-completeness guard (citable filter; agenda excluded by schema)	job
+I01 schema.sql v_decompose_remaining	phase runner — the fuse counter the counter-exit rows read	job
+I01 schema.sql v_frontier_open	phase runner — the queue count the drained-exit rows read	job
+I01 schema.sql v_frontier_mass	frontier.mass — the boundary mass snapshot event (the quest-watch line's descendant)	sse-event
+I01 schema.sql v_claim_closure	phase runner — the three-zeros gate sweep (bare/unreferenced/dual-arm)	job
+I01 canonical-queries.sql q1_derivation_paths	graph browser — the derivation-descent action (Q1 shape)	ui-surface
+I01 canonical-queries.sql q1_l2_violations	phase runner — verification must find zero dangling leaves	job
+I01 canonical-queries.sql q2_dependent_evidence	graph browser — the independence display for cited pairs (Q2 shape)	ui-surface
+I01 canonical-queries.sql q3_neighborhood	graph browser — bounded-radius cycle-safe walk (Q3 shape)	ui-surface
+I01 canonical-queries.sql q4_dedup_candidates	arc entry 3 — the exact leg of the tool-side dedup check	arc-entry
+I01 seed.sql	PoC fixtures plan — the runnable-fixture-graph pattern the kb-space material augments	fixtures-plan
+I01 DECISIONS.md DR-12 (no schema constraint marks liveness)	dev/prod parity — liveness is runtime state: identical schema dev/prod, the registry is redis in both	deployment
+I01 artifacts/check-constraints.sh + check-ddl.sh + check-coverage.sh	arc entry 2 — adopted as CI regression gates over the DDL	arc-entry
+I02 schema-i02.sql quest_lifecycle_events	quest.state — every ledgered transition emits the event (actor, note, from/to, fingerprint at freeze)	sse-event
+I02 schema-i02.sql report_versions	report view — the version chain + pinned fingerprints + the standing flip	ui-surface
+I02 schema-i02.sql report_citations	slices/reports — binding output + import marking actions	slice
+I02 schema-i02.sql workspaces	dashboard — the workspace-admin panel	ui-surface
+I02 schema-i02.sql workspace_members	dashboard — membership administration	ui-surface
+I02 schema-i02.sql resource_grants	dashboard — grant administration (the sharing layer)	ui-surface
+I02 schema-i02.sql v_canonical_claims	graph browser — the hub tab: reuse lookup + type-divergence rows	ui-surface
+I02 schema-i02.sql v_quest_graph_fingerprint	report view — pin + staleness display (detected, never prevented)	ui-surface
+I02 schema-i02.sql v_quest_lineage	graph browser — origin-quest chains + graft provenance	ui-surface
+I02 schema-i02.sql v_resource_visibility	slices/watch — the SSE gate read before headers are set; the same gate on every action	slice
+I02 queries-i02.sql M1	graph browser — hub exact-text reuse + type-divergence queries	ui-surface
+I02 queries-i02.sql M2	graph browser — lineage/graft path queries	ui-surface
+I02 queries-i02.sql M3	report view — version chain + fingerprint drift inventory	ui-surface
+I02 queries-i02.sql M4	dashboard — the visibility check behind grant administration	ui-surface
+I02 queries-i02.sql X1	arc entry 2 — cross-consistency invariants adopted as CI assertions	arc-entry
+I02 queries-i02.sql B1	report view — the deterministic citation binding pass + footnote rendering	ui-surface
+I02 seed-i02.sql	PoC fixtures plan — the fixture tenants the kb-space material augments	fixtures-plan
+I02 DESIGN.md §8 visibility and sharing	arc entry 1 — the mint's authorize_user policy point is configured against the grant model (D6 day one)	arc-entry
+I02 artifacts/check-constraints.sh + check-ddl.sh + check-coverage.sh	arc entry 2 — CI regression gates	arc-entry
+I03 schema-i03.sql embedding_models	credentials boundary — the registry row's api_key_ref is a credential REFERENCE; resolution app-side, never a secret	security
+I03 schema-i03.sql embed_jobs	fetch→chunk→embed pipeline — the pipeline ledger: kinds, idem_key, done_items cursor, terminal-state law	job
+I03 schema-i03.sql emb_bge_m3_1024	fetch→chunk→embed pipeline — the first registered model's generated vector table	job
+I03 schema-i03.sql emb_minilm_ab_384	re-chunk/re-embed job — the A/B challenger table proves the register-two-models law	job
+I03 queries-i03.sql hybrid RRF fusion family	slices/retrieval — the hybrid query service behind the retrieve tool (dense + FTS, K=60)	slice
+I03 queries-i03.sql near-dup designated-slot probe	arc entry 3 — the near leg of the dedup candidate check	arc-entry
+I03 DESIGN.md §4 registration/generation/retirement law	arc entry 2 — the registrar/generator lands as application code (retire means gone)	arc-entry
+I03 seed-i03.sql	PoC fixtures plan — the resumable-cursor + A/B fixture graphs	fixtures-plan
+I03 artifacts/check-constraints.sh + check-ddl.sh + check-coverage.sh	arc entry 2 — CI regression gates	arc-entry
+I04 failure-modes.tsv FM-01, FM-05, FM-06, FM-07, FM-08, FM-11, FM-13, FM-15, FM-23	arc entry 3 — the retryable classes: fresh seed per retry, jittered backoff above the gem's immediate retry	arc-entry
+I04 failure-modes.tsv FM-02, FM-09, FM-22, FM-24	arc entry 3 — the size/context/cache-wall guards: refuse new ingestion, bank at the boundary, prefix-cache policy	arc-entry
+I04 failure-modes.tsv FM-03, FM-04	arc entry 3 — prevented-by-default replay loop + the tool deadline watchdog (pgroup hygiene)	arc-entry
+I04 failure-modes.tsv FM-14, FM-18, FM-20, FM-25	transcript watcher — the live signal census: dropped chunks, stall window, spawn wedge, telemetry completeness	job
+I04 failure-modes.tsv FM-10, FM-16, FM-19, FM-26	launch gate — the terminal classes: dialect boot raise, one-writer refusal naming holder + driver, pause/cancel delivery, final auth naming the ref	job
+I04 failure-modes.tsv FM-12	assurance_alert — the unknown-tool signature feeding the shape-storm alert	sse-event
+I04 failure-modes.tsv FM-17	phase runner — the turn-boundary budget rollups the budget stop-rule rows read	job
+I04 failure-modes.tsv FM-21	reaper sweep — orphaned rows whose worker is gone are stamped, never left	job
+I04 DESIGN.md component registry: LoopDriver, ProviderDesk, RetryGovernor, ToolHarness, TranscriptLedger, SpendRecorder, SessionSupervisor, SubagentRunner, ContextBudgeter, StreamWatch	arc entry 3 — lib/kquest/engine hosts all ten; placement decided by DR-01	arc-entry
+I04 DECISIONS.md DR-04 (pause-reconfigure-resume; steer-while-running rejected)	steering console — the console's flow law, wired verbatim	ui-surface
+I04 DECISIONS.md DR-05 (launch gate + reaper + write-guard)	launch gate — the gate transaction law the quest worker wires	job
+I04 DECISIONS.md DR-06 (the transcript-ceiling runtime menu A/B/C)	steering console — the menu is PRESENTED, the operator decides; (A) presented first as the only option with live evidence	ui-surface
+I04 DECISIONS.md DR-07 (seed default + the gem patch)	arc entry 0 — the fast-completions seed-passthrough patch	arc-entry
+I04 DESIGN.md §5.3 one-writer enforcement mechanics	worker registry — the registry read inside the gate transaction; holder named on refusal	job
+I04 DESIGN.md §5.1 kill semantics	deployment shape — any process may die; committed mutations survive; supervision is built on this law	deployment
+I04 artifacts/check-failure-modes.sh + check-coverage.sh	arc entry 3 — CI regression gates	arc-entry
+I05 artifacts/fixtures/node_add.md, node_set.md, node_get.md, edge_add.md, frontier_add.md, frontier_close.md, search.md, list.md, paths.md, mass.md, neighbors.md	arc entry 3 — the graph tool family acceptance tests (canonical calls + frozen refusals; node_add.md carries the dedup-surfacing note)	arc-entry
+I05 artifacts/fixtures/source_grep.md, source_list.md	slices/corpus — corpus read surfaces (grep context lines; staged listing with chunk/embed state)	slice
+I05 artifacts/fixtures/source_read.md	fetch-layer budget boundary — sliced offset-checked reads (L1) + the one hard-cap line	security
+I05 artifacts/fixtures/web_search.md, web_fetch.md	fetch-layer budget boundary — the budget echo + budget-exceeded refusal; fetch is the only ingestion door	security
+I05 artifacts/fixtures/retrieve.md	slices/retrieval — the hybrid query tool: no model parameter, ever	slice
+I05 artifacts/fixtures/report_draft.md, report_bind.md	report view — sectioned authoring + binding-pass/standing-flip actions	ui-surface
+I05 artifacts/fixtures/status.md	phase.state — the parity fields are exactly the gate-sweep payload	sse-event
+I05 artifacts/fixtures/quest_status.md	quest view — the budget/writer/quest/phase parity lines	ui-surface
+I05 artifacts/fixtures/harness.md	launch gate — the dispatch contract: unknown-tool, write-guard, deadline texts frozen here	job
+I05 artifacts/fixtures/subagent_spawn.md, subagent_status.md	subagent.run — spawn/status project to the run-registry event (no result is not no process)	sse-event
+I05 DESIGN.md parity fields status.bare_claims, status.unreferenced, status.dual_arm_claims, status.decompose_remaining, status.frontier_open, status.frontier_mass	phase.state — the gate half of the parity table is the boundary-event payload	sse-event
+I05 DESIGN.md parity fields status.claims, status.evidence (the cold-boot reconstruction half)	phase runner — cold-boot reconstructs working state from store-backed reads (I04 §5.1 step 4); the phase.state payload deliberately carries only the six gate fields	job
+I05 DESIGN.md parity fields quest_status.web_calls, quest_status.tokens, quest_status.spend_usd, quest_status.writer, quest_status.quest, quest_status.phase	quest view — the orientation half of the parity table	ui-surface
+I05 DESIGN.md §8 subagent restricted-tool profiles	subagent.run — profile-restricted child runs over disjoint bands	sse-event
+I05 DESIGN.md §2 the tool inventory	process containment — the closed registry: nothing outside the frozen twenty-four registers or reaches the wire	security
+I05 DECISIONS.md DR-07 (dedup-by-construction wiring; k=5/0.6 provisional)	arc entry 3 — the BLOCKING recalibration task against the real registry model	arc-entry
+I05 DECISIONS.md DR-10 (tool-call transaction shape)	audit completeness — the audit row rides the mutation transaction; the transcript stays verbatim	security
+I05 artifacts/check-fixtures.sh + check-coverage.sh	arc entry 3 — CI regression gates	arc-entry
+I06 stop-rules.tsv SR-01 (quest.max_phases)	phase runner — the launched backstop; decompose counts toward the cap	job
+I06 stop-rules.tsv SR-02 (quest.web_call_budget), SR-03 (quest.token_budget), SR-04 (quest.spend_budget_usd)	phase runner — the three budget lines: rollups at every boundary; route or finisher-pause	job
+I06 stop-rules.tsv SR-05 (phase.wall_timeout_s), SR-06 (phase.timeout_s), SR-08 (phase.retry_cap)	phase runner — attempt walls + the retry-cap escalation	job
+I06 stop-rules.tsv SR-09 (descent.mass_decay_cut_fraction), SR-10 (descent.mass_decay_window), SR-11 (descent.plateau_range_max), SR-12 (descent.plateau_window)	phase runner — the mass-decay primary + plateau backstop exit discipline	job
+I06 stop-rules.tsv SR-13 (quest.frontier_floor_mass), SR-14 (quest.frontier_build_max)	phase runner — the frontier-build gates	job
+I06 stop-rules.tsv SR-07 (phase.activity_timeout_s)	reaper sweep — the activity reaper bound	job
+I06 stop-rules.tsv SR-15 (engine.transcript_ceiling_warn_bytes), SR-16 (engine.transcript_ceiling_hard_bytes)	transcript watcher — the ceiling band: warn refuses new ingestion + banks; hard ends at a boundary, then the menu	job
+I06 stop-rules.tsv SR-17 (engine.slow_stall_bytes), SR-18 (engine.slow_stall_window_s), SR-19 (engine.unattended_pause_s)	transcript watcher — the stall window + unattended pause; never auto-kill	job
+I06 transitions.tsv any-phase pause rows (transcript_ceiling, slow_stall_unattended, retry_cap_exhausted)	steering console — the pause-and-present triggers behind three menus	ui-surface
+I06 transitions.tsv any-phase graph_invalid (stop-loud)	quest.stop — the one stop that cannot route honestly; the loud route rides this event	sse-event
+I06 transitions.tsv any-work-phase budget_exhausted + phase_cap (route via the finisher discipline)	quest.stop — stop markers ride the event as synthesis provenance	sse-event
+I06 transitions.tsv any-finisher-phase budget_exhausted (pause)	steering console — the finisher budget menu (a half-written report is preserved)	ui-surface
+I06 transitions.tsv briefing-init budget_exhausted + phase_cap (pause)	steering console — the briefing cap menus	ui-surface
+I06 transitions.tsv briefing-init phase_complete (agenda_staged — the autonomy handoff row)	interactive briefing — gate then autonomy; the operator watches and steers only via pause	ui-surface
+I06 transitions.tsv decompose phase_complete rows	phase runner — the seeding phase's four exits (counter-exit, mass-floor-gate, mass-decay-armed, route-to-synthesis)	job
+I06 transitions.tsv frontier-build phase_complete rows	phase runner — the build phase's four exits (counter-exit, mass-floor-gate, mass-decay-armed, route-to-synthesis)	job
+I06 transitions.tsv descent phase_complete rows	phase runner — the descent exit disciplines (mass-decay-primary, plateau-cut-backstop, counter-exit, drained-exit, mass-floor-gate, descent-repeat)	job
+I06 transitions.tsv synthesis phase_complete (citation_coverage — the finisher handoff row)	phase runner — the synthesis exit gate	job
+I06 transitions.tsv verification phase_complete (verification_clean — the quest-done terminal)	phase runner — the completion gate	job
+I06 transitions.tsv verification verification_failed (rework-pause)	steering console — the rework menu: correct in place, re-synthesize, or stay paused	ui-surface
+I06 DESIGN.md §9 per-phase contracts	phase runner — task/deliverables/gate/profile/exit per kind	job
+I06 DESIGN.md §10.2 quest-local law overlays	steering console — the steering payload's editable law text, re-read at boundaries	ui-surface
+I06 DESIGN.md §7 model routing (seeder vs closer; the model_config carrier)	quest view — the routing-map editor cites ladder evidence per entry	ui-surface
+I06 DESIGN.md §5 the never-reportless finisher	quest.stop — every stop routes to the finisher or is loud on this event	sse-event
+I06 artifacts/check-transitions.sh + check-coverage.sh	arc entry 4 — CI regression gates	arc-entry
+I07 tripwires-i07.sql tw_wedge	assurance_alert — the frozen-ledger stall signature; last_tool in payload; never kill	sse-event
+I07 tripwires-i07.sql tw_slowstall	assurance_alert — the durable trickle projection; the live half is the watcher's under the same keys	sse-event
+I07 tripwires-i07.sql tw_size_ceiling	assurance_alert — the ceiling band alert; the predicate never ends a session	sse-event
+I07 tripwires-i07.sql tw_churn	assurance_alert — ten consecutive failed calls; teaching refusals keep the loop running	sse-event
+I07 tripwires-i07.sql tw_rotation	assurance_alert — attempt-cap cycling; a raised cap is an operator decision the signal makes visible	sse-event
+I07 tripwires-i07.sql tw_empty_storm	assurance_alert — the billed-input, zero-output signature	sse-event
+I07 tripwires-i07.sql tw_repetition	assurance_alert — byte-identical retry bodies	sse-event
+I07 tripwires-i07.sql tw_missing_spend	assurance_alert — a ledger defect signal, not a model defect	sse-event
+I07 tripwires-i07.sql tw_cache_wall	assurance_alert — the re-prefill wall; re-routing is the operator's	sse-event
+I07 tripwires-i07.sql tw_shape_storm	assurance_alert — stream/shape honesty classes not landing	sse-event
+I07 tripwires-i07.sql tw_context_blowout	assurance_alert — the teaching-not-landing storm; the sliced-read cap is the backstop	sse-event
+I07 tripwires-i07.sql tw_hub_divergence	graph browser — same text, conflicting typed terminals; adjudicated in the source quest	ui-surface
+I07 tripwires-i07.sql tw_fingerprint_drift	report view — stale report pins + drifted archive pins; pin_kind in payload	ui-surface
+I07 DESIGN.md §5 metrics refusal_rate_session, refusal_class_census, transcript_audit_bytes, tripwire_fires	alerting — the refusal/taxonomy/alert-rate panels	ui-surface
+I07 DESIGN.md §5 metrics spend, metabolism, empty_completion_rate, closure_economics_cost_per_class, cost_per_claim/cost_per_evidence	cost views — the economics panels (reporting-only; never bind the operator)	ui-surface
+I07 DESIGN.md §5 metric mass_curve	frontier inspector — frontier mass over descent rounds	ui-surface
+I07 DESIGN.md §6 blind spots unmined_citable, fetched_never_cited, uncited_claims, aging_open_needs	dashboard — the day-one blind-spot panel	ui-surface
+I07 DESIGN.md §6 blind spot capped_listing_overhang	cap telemetry job — the overhang metric's wiring, deferred at I07 DR-05 to cap telemetry	job
+I07 DESIGN.md §1 the guarantee map	dashboard — the honesty-bounds panel framing the assurance surfaces	ui-surface
+I07 DESIGN.md §7 the model qualification ladder	quest view — the routing-map editor cites rung evidence per model	ui-surface
+I07 DESIGN.md §3 the conflict adjudication workflow	graph browser — the docket's detect, ledger, hypothesize, cross-examine flow	ui-surface
+I07 DESIGN.md §2 verification machinery	arc entry 4 — the verification phase's runtime behavior wired with the runner	arc-entry
+I07 DECISIONS.md DR-07 (byte-level tripwires as durable-ledger projections)	watcher.bytes — the byte-accurate live half: the census event carries what the SQL projection cannot	sse-event
+I07 DECISIONS.md DR-08 (attribution stays reporting-only; the enforcement half re-pointed)	arc entry 5 — the conditional consequence layer, off by default; reopen-condition recorded	arc-entry
+I07 DECISIONS.md DR-01 + DR-02 (audit cadence; spot-check sampling law)	arc entry 4 — every verification phase sweeps the three failure modes; n=20 seeded stratified	arc-entry
+I07 artifacts/check-tripwires.sh + check-coverage.sh	arc entry 4 — CI regression gates	arc-entry
