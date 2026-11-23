@@ -167,7 +167,8 @@ Two load-bearing shapes, frozen:
   — `supports_new` is an ARRAY of field objects; the fused form creates
   evidence + its claims + their edges in ONE atomic call (span proven
   before any write; failure creates nothing). The PoC's claim-side fusion
-  refusal taught the wrong direction for three sessions
+  refusal taught the wrong direction across three failed fused attempts
+  (two sessions plus an earlier documented stumble — judge F3 wording fix)
   (`2026-11-17-descent-observation.md` §incident A); the fused form lives
   EVIDENCE-SIDE, and the claim-side refusal names that inverse (fixture
   `fused-direction`).

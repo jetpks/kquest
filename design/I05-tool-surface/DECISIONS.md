@@ -109,7 +109,10 @@ container must exist and be taught by the coercion note.
 
 ## DR-04 — Sliced-read defaults: offset/limit values and the slice cap
 
-**Status:** DECIDED
+**Status:** OPERATOR-RULING-NEEDED (values DECIDED; the default MODE of
+the read_slice line — hard vs all-advisory per the I04 DR-09 ruling —
+was excepted by the designer without a flag; judge F1 turned it into
+this ruling item)
 **Decision:** `source_read` takes `offset` (1-based line) and `limit`
 (lines), DEFAULT limit 60 lines, hard cap 8,000 chars per slice
 (`read_slice_cap_chars`, carried from I04 FM-22); a read that would
@@ -138,6 +141,21 @@ ruling; mode=hard is the shipped default for this line because its
 crossing is silent context blowout, the exact class the lesson is
 about); (c) larger default slices — rejected: 8,000 chars ≈ 2K tokens
 keeps read→extract interleaving visible to the ContextBudgeter.
+**Ruling needed (judge F1):** the I04 DR-09 ruling is ALL-ADVISORY BY
+DEFAULT; this record excepted one line without the flag. **Options:**
+- **(A) Keep the hard default for read_slice only** (the designer's
+  choice + judge's reading of the rationale): a hard slice cap is a
+  teaching refusal at the read boundary — the frozen non-sliced-read
+  text exists and never destroys anything; crossing it is the silent
+  78%-class blowout. Formally amends the I04 DR-09 default for this
+  single line; every other line stays advisory-default.
+- **(B) Revert to all-advisory default per the ruling:** the line ships
+  mode=advisory like all others; the operator flips it hard (likely
+  immediately — the frozen refusal then fires only in hard mode; the
+  advisory shape is the cap-continuation/echo teaching pattern).
+**Recommendation:** (A) — the exception is substantively right (the
+refusal is itself the teaching mechanism, not a stop), but it is the
+operator's call because the I04 ruling was explicit and recorded.
 
 ## DR-05 — Unknown-tool response: in-band error + the session's legal-tools list
 

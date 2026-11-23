@@ -83,10 +83,23 @@ resolve_evidence() { # $1 = evidence cell -> 0 ok / 1 fail
       if [ -z "$name" ]; then
         return 1
       fi
-      for f in $SQLFILES; do
-        if grep -q -- "$name" "$f"; then return 0; fi
-      done
-      return 1
+      # judge-F2 fix: a class may cite multiple schema objects, joined
+      # with ' + ' — every named object must exist in the DDL artifacts.
+      found_all=1
+      echo "$name" | tr '+' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | while IFS= read -r nm; do
+        [ -z "$nm" ] && continue
+        ok=0
+        for f in $SQLFILES; do
+          if grep -q -- "$nm" "$f"; then ok=1; break; fi
+        done
+        [ "$ok" -eq 0 ] && { echo "MISSING:$nm"; found_all=0; }
+      done > /tmp/kquest_i05_schema_$$
+      if [ -s /tmp/kquest_i05_schema_$$ ]; then
+        rm -f /tmp/kquest_i05_schema_$$
+        return 1
+      fi
+      rm -f /tmp/kquest_i05_schema_$$
+      return 0
       ;;
     "")
       return 1

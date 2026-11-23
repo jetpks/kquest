@@ -33,7 +33,7 @@ EVIDENCE: schema-law (uq_frontier_need)
 REFUSAL: SCORE-RANGE: uncertainty and relevance are integers 1–5 — 5 = no primary grounding / load-bearing; need NAMES the underlying study (authors, year, venue), it is never a placeholder
 ```
 
-EVIDENCE: schema-law (ck_frontier_uncertainty)
+EVIDENCE: schema-law (ck_frontier_uncertainty + ck_frontier_relevance)
 
 ### refusal: unknown-node
 
