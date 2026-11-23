@@ -227,9 +227,12 @@ fi
 NOPOC=$(awk -F'\t' '$7 !~ /^\/Users\/eric\/architect\/spaces\/20261110-knowledge-builder\// { print $1 }' "$WORK/srows" | tr '\n' ' ')
 [ -n "$NOPOC" ] && fail "rows whose provenance carries NO PoC-path citation: $NOPOC" || pass "every default's provenance carries a PoC-path citation (R-018)"
 
-echo "== 3b. unmeasured calibrations flagged in DECISIONS (AC3) =="
+echo "== 3b. unmeasured calibrations ruled/flagged in DECISIONS (AC3) =="
 # These config keys ship backtest-anchored / measured-absence defaults and
-# MUST appear inside an OPERATOR-RULING-NEEDED record in DECISIONS.md.
+# MUST appear inside an OPERATOR-RULING-NEEDED record in DECISIONS.md —
+# OR (post-ratification, 2026-11-22) inside a DECIDED record carrying an
+# explicit operator-ruling annotation: a ruled calibration is no longer
+# pending; the ruling note IS its provenance.
 for key in quest.frontier_floor_mass descent.mass_decay_cut_fraction quest.token_budget quest.spend_budget_usd; do
   found=0
   k=1
@@ -238,9 +241,12 @@ for key in quest.frontier_floor_mass descent.mass_decay_cut_fraction quest.token
     if grep -qF "$key" "$blk" && grep -q '^\*\*Status:\*\* OPERATOR-RULING-NEEDED' "$blk"; then
       found=1; pass "$key flagged OPERATOR-RULING-NEEDED (DR-$(printf '%02d' $k))"; break
     fi
+    if grep -qF "$key" "$blk" && grep -q "operator ruling 2026-11-22" "$blk"; then
+      found=1; pass "$key RULED by operator 2026-11-22 (DR-$(printf '%02d' $k))"; break
+    fi
     k=$((k+1))
   done
-  [ "$found" -eq 0 ] && fail "$key (unmeasured calibration) is NOT flagged in any OPERATOR-RULING-NEEDED record"
+  [ "$found" -eq 0 ] && fail "$key (unmeasured calibration) is NOT ruled or flagged in any DECISIONS record"
 done
 
 echo "== 4. config-key parity: DESIGN+transitions vs stop-rules (AC3) =="

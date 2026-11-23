@@ -8,6 +8,11 @@ Prior law is consumed exactly as ratified; amendments are proposals only
 ## DR-01 — Exit discipline defaults per phase kind
 
 **Status:** DECIDED
+**Ratified 2026-11-22 (knowingly):** the operator confirmed the ONE
+reference-ordering amendment — mass-decay is checked BEFORE plateau-cut
+(the PoC driver checked plateau first); rationale: mass decays before
+count ever flattens, and a primary checked second is not primary
+(R-057 + the −75.5%/−61% backtest).
 **Decision:** Descent carries THREE exits in priority order:
 mass-decay primary (fires when frontier mass ≤ 0.25×running peak
 sustained over 10 boundaries — DR-07 calibrates), plateau-cut backstop
@@ -39,8 +44,8 @@ the organic exits reportless is a dead law as primary.
 
 ## DR-02 — Plateau window + mass floor defaults
 
-**Status:** OPERATOR-RULING-NEEDED (the frontier floor value; the window
-and range are decided within)
+**Status:** DECIDED (operator ruling 2026-11-22: **A — ratified as recommended**) — the frontier floor ships 200 built-in)
+**Ruling note:** harness-validated (12/12 dry runs; would have fired on quest 3's mass 98). The window and range are decided within.
 **Decision:** Plateau window W = max(10, ⌊n/2⌋) completed descent phases
 with a recorded frontier_open snapshot, range ≤ 2 (`descent.plateau_window`
 ships 10, `descent.plateau_range_max` ships 2) — the measured I16 law
@@ -116,7 +121,7 @@ and it stays design-compatible (L12).
 
 ## DR-04 — Briefing autonomy threshold
 
-**Status:** OPERATOR-RULING-NEEDED
+**Status:** DECIDED (operator ruling 2026-11-22: **A — ratified as recommended**) — briefing autonomy = sign-off-only; no numeric threshold exists to misfire)
 **Decision:** The briefing is an interactive decompose round 1 (operator
 + agent decompose the top-level question, stage agenda docs, freeze the
 topic + topic questions); the autonomy gate is `agenda_staged` (≥1 agenda
@@ -212,7 +217,7 @@ inherited corpora (82 consecutive decompose phases in v3).
 
 ## DR-07 — Mass-decay cut calibration
 
-**Status:** OPERATOR-RULING-NEEDED
+**Status:** DECIDED (operator ruling 2026-11-22: **A — ratified as recommended**) — mass-decay cut = 0.25× running peak over a 10-phase window; peak-relative kills the inflation problem)
 **Decision:** The rule shape is decided (DR-01): fire when frontier mass
 ≤ cut-fraction × running peak, sustained over the window. The catalog
 ships `descent.mass_decay_cut_fraction` = **0.25** and
@@ -255,7 +260,9 @@ day-one rule.
 **Status:** DECIDED
 **Decision:** `quest.frontier_build_max` default **3** (the built,
 harness-tested driver default), overridable per quest (live precedent:
-v2/v3 ran 5). Rounds are per QUEST (count of frontier-build phase rows),
+v2/v3 ran 5).
+**Ratified 2026-11-22:** operator confirmed 3 (harness-tested) over the
+live-runbook 5; neither value ever fired as a gate; toggleable at pause. Rounds are per QUEST (count of frontier-build phase rows),
 and the cap is the re-entry valve: at cap with mass still under the
 floor, the gate stops opening and descent/synthesis proceed — the
 frontier stays thin and the report says so (honest thin-queue markers,
@@ -274,7 +281,7 @@ the parallel-decompose candidate.
 
 ## DR-09 — Token and spend cap defaults
 
-**Status:** OPERATOR-RULING-NEEDED
+**Status:** DECIDED (operator ruling 2026-11-22: **A — ratified as recommended**) — token/spend caps ship 0 = off; honest measured absence; the I03 DR-06 revisit trigger governs if spend ever gains consequences)
 **Decision:** `quest.token_budget` and `quest.spend_budget_usd` ship
 default **0 = off**, mode advisory-default (toggleable hard per the I04
 DR-09 pattern). The web-call budget ships 1400 (the live-runbook value,
