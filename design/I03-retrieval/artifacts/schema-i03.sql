@@ -185,11 +185,12 @@ CREATE TABLE embed_jobs (
   CONSTRAINT ck_embed_jobs_strategy_scope
     CHECK (strategy_id IS NULL OR kind = 'chunk'
            OR (kind = 'embed' AND target_kind = 'chunk')),
-  -- quest scoping: claim/need embed jobs are quest-scoped by law (their
-  -- targets are quest-scoped rows)
+  -- quest scoping: ALL embed jobs are quest-scoped (DR-06 ruled A at
+  -- ratification 2026-11-22: per-quest spend attribution — corpus
+  -- backfills run as explicit per-quest jobs, one job per (strategy,
+  -- quest); claim/need targets are quest-scoped rows; probe E22)
   CONSTRAINT ck_embed_jobs_scope
-    CHECK (NOT (kind = 'embed' AND target_kind IN ('claim', 'frontier_need'))
-           OR quest_id IS NOT NULL),
+    CHECK (kind <> 'embed' OR quest_id IS NOT NULL),
   -- spend law: usage links exist only on COMPLETED embed jobs (D10; the
   -- ledger records real spend, reconciled at completion — DR-06)
   CONSTRAINT ck_embed_jobs_usage_kind

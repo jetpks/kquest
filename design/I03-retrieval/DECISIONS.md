@@ -111,8 +111,11 @@ reuses ids.
 
 ## DR-04 — Retire means gone: drain jobs, drop the table, flip the pair
 
-**Status:** OPERATOR-RULING-NEEDED
-**Decision (proposed):** Retire is an op SEQUENCE with a schema-enforced
+**Status:** DECIDED (operator ruling 2026-11-22: **A — gone/drain/drop**)
+**Ruling (operator, recorded verbatim):** "if we're retiring an embedding
+model, we're unlikely to be able to generate new embeddings using it
+with which to search, so keeping the table has no value."
+**Decision (as designed — the ruling confirms the shipped shape):** Retire is an op SEQUENCE with a schema-enforced
 outcome: drain or cancel pending/running jobs → DROP the generated table
 (vectors die with the model) → set `status='retired'` + `retired_at`
 (pair law, probe E15). The generated tables' active-status pins make the
@@ -135,10 +138,12 @@ and post-mortem dedup archaeology — costs a third status in every
 generated table + registry, and stale-vector risk is mitigated only by
 discipline; (C) keep vectors, no bookkeeping — rejected outright
 (orphaned unregistered tables).
-**Recommendation:** (A) day one (matches the fixture and schema as
-shipped); add (B) as an ADDITIVE status (new rows + a third CHECK value)
-when a real A/B workflow asks to keep a retired leg readable — the
-registry makes that a data+DDL migration, not a redesign.
+**Recommendation (pre-ruling):** (A) day one (matches the fixture and
+schema as shipped); add (B) as an ADDITIVE status (new rows + a third
+CHECK value) when a real A/B workflow asks to keep a retired leg
+readable — the registry makes that a data+DDL migration, not a redesign.
+**Post-ruling note:** (A) RATIFIED. (B) remains the recorded additive path
+should an A/B retention workflow ever want frozen readability.
 **Alternatives considered:** delete-only-in-batches retire — same
 semantics as (A) with more failure modes; CASCADE from the registry row —
 rejected: retire must be a deliberate op sequence (live jobs drained
@@ -178,8 +183,18 @@ side of mechanical relevance, embedded per query, not stored corpus).
 
 ## DR-06 — Embed spend accounting: one usage row per completed embed job; corpus-level backfill attribution
 
-**Status:** OPERATOR-RULING-NEEDED
-**Decision (proposed, day-one half already exercised by the fixture):**
+**Status:** DECIDED (operator ruling 2026-11-22: **A — per-quest jobs**)
+**Ruling (operator, recorded verbatim — REVISIT TRIGGER for ENTRY 7):**
+"per quest jobs, but for the record, i don't really like this either.
+supported embeddings models are really the house's decision, which is
+why B exists as an option, but a 'house quest' is pure jank borne of too
+strict requirements. the only reason we're going with A right now is
+because the cost tracking isn't tied to consequences — it's purely
+reporting, and in that regard, it has value. If I know that Quest Foo
+costs $20 to re-embed and Quest Bar costs $0.40, that's useful
+information. If we were using this to enforce budgets/quotas, we'd
+have to revisit the design here."
+**Decision (amended at ratification to enforce A in schema):**
 Every COMPLETED embed job links exactly ONE `usage_events` row of kind
 'embedding' — schema law in BOTH directions: `ck_embed_jobs_usage_kind`
 (probe E08, usage⇒embed∧complete) and `ck_embed_jobs_complete_spend`
@@ -192,10 +207,13 @@ reconciled once, at completion (a failed-and-billed attempt still gets
 its own ledger row per I01 DR-14; it just isn't the JOB's linked total).
 Because the I01 usage chain session→phase→quest→user is TOTAL, every
 embed job must run inside a session of a phase of a quest — so embed jobs
-carry `quest_id`/`phase_id`, and claim/need embed jobs are quest-scoped by
-law (`ck_embed_jobs_scope`). The flagged question is the corpus-level
-BACKFILL: a re-chunk/re-embed generation or a model swap is not naturally
-"about" one quest.
+carry `quest_id`/`phase_id`, and under the ruled option A ALL embed jobs
+are quest-scoped by law (`ck_embed_jobs_scope`, probe E22 — tightened at
+ratification from claim/need-only to every embed job). The corpus-level
+BACKFILL is no longer an open question: a re-chunk/re-embed generation or
+model swap runs as explicit per-quest jobs (one job per (strategy,
+quest)), so every spend row lands on the quest whose corpus was
+re-embedded.
 **Rationale:** embedding spend is real spend (D10) and corpus maintenance
 is spend without a natural quest — the two laws (chain totality, honest
 attribution) pull against each other for backfills. Day one the tension
@@ -214,10 +232,17 @@ change; (C) relax the chain: allow usage_events with NULL quest — an I01
 AMENDMENT (usage_events.quest_id NOT NULL → nullable + pairing laws);
 rejected by the proposal because it breaks the D10 chain that budget
 rollups read.
-**Recommendation:** (A) now (it is what the fixture exercises; honest
-attribution per quest, zero schema motion). If corpus-wide sweeps become
-a real workflow, adopt (B) as a convention + config; (C) only if (B)
-proves too heavy, and then as a formal I01 amendment decision record.
+**Recommendation (pre-ruling):** (A) now (it is what the fixture
+exercises; honest attribution per quest, zero schema motion). If
+corpus-wide sweeps become a real workflow, adopt (B) as a convention +
+config; (C) only if (B) proves too heavy, and then as a formal I01
+amendment decision record.
+**Post-ruling note:** (A) RATIFIED and now SCHEMA-ENFORCED
+(`ck_embed_jobs_scope` refuses quest-less embed jobs — probe E22). Per
+the operator's ruling text above: attribution REOPENS if cost tracking
+ever gains CONSEQUENCES (budgets/quotas) — ENTRY 7's budget design must
+cite this record; option (B) house-quest remains the recorded fallback,
+option (C) remains a formal I01 amendment.
 **Alternatives considered:** cost-NULL housekeeping rows outside the
 ledger — rejected: D10 says every embedding call is accounted; hiding
 maintenance spend is the opposite of the ledger's purpose.
@@ -537,8 +562,8 @@ that will run in production.
 
 | DR | Flag | Question for ratification |
 |---|---|---|
-| DR-04 | OPERATOR-RULING-NEEDED | Retire semantics: gone (A, recommended) vs frozen-readable (B, additive later) |
-| DR-06 | OPERATOR-RULING-NEEDED | Corpus-level backfill spend attribution: per-quest jobs (A, recommended) vs house quest (B) vs relaxing the I01 chain (C, an I01 amendment) |
+| DR-04 | DECIDED (operator 2026-11-22) | Retire = gone/drain/drop (A); frozen-readable (B) stays the recorded additive path |
+| DR-06 | DECIDED (operator 2026-11-22) | Per-quest jobs (A), schema-enforced (probe E22); REVISIT TRIGGER: reopens if budgets/quotas are ever enforced (ENTRY 7 must cite) |
 
 ## Proposed prior-law amendments
 

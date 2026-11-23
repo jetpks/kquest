@@ -190,6 +190,12 @@ probe "E21 COMPLETED embed job with NO spend link (the completed=>spend directio
    VALUES ('$ALICE', '$QA', 'd0000000-0000-4000-8000-000000000002', 'embed', '$M1', 'claim',
            'complete', 'embed:$M1:claim:quest:nospend', 1, 1, now(), now());"
 
+probe "E22 chunk-family embed job with NO quest (corpus backfills are per-quest jobs — DR-06 ruled A, 2026-11-22)" \
+  "ck_embed_jobs_scope" \
+  "INSERT INTO embed_jobs (user_id, quest_id, phase_id, kind, model_id, target_kind, strategy_id, state, idem_key, total_items, done_items, started_at, ended_at, usage_event_id)
+   VALUES ('$ALICE', NULL, NULL, 'embed', '$M1', 'chunk', 'c0000000-0000-4000-8000-000000000001',
+           'complete', 'embed:$M1:chunk:orphan', 1, 1, now(), now(), '$UE1');"
+
 probe "E19 embed job carrying a chunk-strategy while targeting claims" \
   "ck_embed_jobs_strategy_scope" \
   "INSERT INTO embed_jobs (user_id, quest_id, phase_id, kind, model_id, target_kind, strategy_id, state, idem_key, total_items, done_items, started_at, ended_at, usage_event_id)

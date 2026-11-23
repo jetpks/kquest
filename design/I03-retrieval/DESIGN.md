@@ -119,7 +119,7 @@ erDiagram
   embed_jobs {
     uuid id PK
     uuid user_id FK
-    uuid quest_id FK "triggering quest (nullable: corpus backfill)"
+    uuid quest_id FK "triggering quest (NOT NULL for embed jobs — DR-06 ruled A)"
     uuid phase_id FK
     text kind "fetch | chunk | embed"
     uuid model_id FK "registry-only path (embed kind)"
@@ -187,7 +187,7 @@ the ERD repeats its shape to keep ERD↔DDL parity machine-checkable.)
 ## 3. Entity specifications
 
 Notation as I01/I02: constraints named as they appear in `schema-i03.sql`,
-checkable against `check-constraints.sh` output (probe ids E01–E21).
+checkable against `check-constraints.sh` output (probe ids E01–E22).
 
 ### 3.1 embedding_models — the registry (R-028, D4)
 
@@ -248,10 +248,14 @@ One row per pipeline run. Shape laws (all named, all probe-bitten):
   Fetch jobs record web-call budget spend (not token spend) — no usage
   row, by design; chunk jobs are local computation.
 - **attribution**: `quest_id` is the TRIGGERING quest (usage events follow
-  it — the D10 chain session→phase→quest→user stays total); claim/need
-  embed jobs are quest-scoped by law (`ck_embed_jobs_scope` — their
-  targets are quest-scoped rows); corpus-level backfills with NULL quest
-  are legal rows whose usage attribution is the DR-06 flagged question.
+  it — the D10 chain session→phase→quest→user stays total). DR-06 was
+  ruled A at ratification (2026-11-22): ALL embed jobs are quest-scoped
+  by law (`ck_embed_jobs_scope`, probe E22 — corpus-wide re-embeds run
+  as explicit per-quest jobs, one job per (strategy, quest), so every
+  usage row lands on the quest that spent it). Cost tracking is
+  reporting-only today; if budgets/quota ENFORCEMENT ever lands
+  (ENTRY 7), attribution reopens per the operator's ruling note
+  (`notes/ratification-20261122T1733-retrieval.md`).
 
 ### 3.3 The generated per-model table (R-029; template = the generator contract)
 
@@ -563,6 +567,7 @@ destination.
 | J-IDEM | one non-failed job per idem key, ever; rerun = no-op resume; failure → legal retry row | SCHEMA: `uq_embed_jobs_idem_active` (E03) | schema-i03.sql; key-minting policy = job runner (ENTRY 8) |
 | J-PROG | progress cursor bounded; completion is terminal and total; failure explained; times ordered | SCHEMA: `ck_embed_jobs_progress` (E05), `_complete_terminal` (E04), `_error_pair` (E06), `_times` (E20), `_run_pair`/`_end_pair` | schema-i03.sql |
 | J-SPEND | embedding spend is real spend: completed embed jobs link a tenancy-pinned usage row of kind 'embedding' — BOTH directions schema law | SCHEMA: `ck_embed_jobs_usage_kind` (E08, usage⇒embed∧complete) + `ck_embed_jobs_complete_spend` (E21, complete∧embed⇒usage; judge F1) + `fk_embed_jobs_usage` (E18, tenancy-pinned) | schema-i03.sql; call-site recording R-046 (ENTRY 4) |
+| J-QUEST | every embed job is quest-scoped: per-quest spend attribution (corpus re-embeds are explicit per-quest jobs) | SCHEMA: `ck_embed_jobs_scope` (E22; DR-06 ruled A, 2026-11-22 — tightened from claim/need-only to all embed jobs at ratification) | schema-i03.sql; ENTRY 7 budget design must cite the DR-06 ruling note (reopens if spend gains consequences) |
 | V-ONE | one vector per (model, target): re-embed REPLACES | SCHEMA: `uq_emb_<slug>_target` NULLS NOT DISTINCT (E14) | schema-i03.sql |
 | V-KIND | embedding targets are chunks, claim canonical_text, frontier needs — evidence readings structurally excluded | SCHEMA: `ck_emb_<slug>_kind` (E10) + `_target_matches_kind` (E11) + `_target_exactly_one` (E12) | schema-i03.sql; DR-05 |
 | V-TEN | a vector row's tenancy is pinned to its target's tenancy (cross-user vector rows impossible) | SCHEMA: the three conditional composite FKs `fk_emb_<slug>_chunk/claim/need` (E13), enabled by the additive `uq_{chunks,claims,frontier}_id_user` | schema-i03.sql; DR-11 |
@@ -586,7 +591,7 @@ ownership (ENTRY 8 query objects).
 | R-028 | DESIGNED | §3.1 embedding_models (registry rows, dims/metric/wire/batch config, lifecycle; register/retire/A-B as data ops); DR-01/DR-04 | credential resolution shape → ENTRY 8 |
 | R-029 | DESIGNED | §3.3/§4 generated per-model tables (template = generator contract; typed dims + hnsw asserted in check-ddl; A/B live in family a4); DR-02/DR-03/DR-16 | the generator app code → implementation arc (ENTRY 8 job topology) |
 | R-030 | DESIGNED | §5 target set (chunks, claims canonical_text, frontier needs; evidence readings structurally excluded — E10); DR-05 | — |
-| R-031 | DESIGNED | §3.2/§6 embed_jobs (fetch/chunk/embed; idempotent idem-key law, resumable cursor, progress, usage-ledger cost; chunking default + re-chunk generations — DR-10); DR-06 | job runner topology → ENTRY 8; retry classes → ENTRY 4 |
+| R-031 | DESIGNED | §3.2/§6 embed_jobs (fetch/chunk/embed; idempotent idem-key law, resumable cursor, progress, usage-ledger cost; chunking default + re-chunk generations — DR-10); DR-06 ruled A (per-quest attribution, all embed jobs quest-scoped) | job runner topology → ENTRY 8; retry classes → ENTRY 4 |
 | R-032 | DESIGNED | §7 hybrid (dense leg, FTS leg via generated tsvector, RRF formula visible + asserted; per-user/quest scoping); BM25 slot §7.1 (pg_search vs hand-rolled trade table, adoption trigger); DR-08/DR-09/DR-11 | BM25 engine choice at adoption → operator ruling with data; lexical config → implementation arc |
 | R-033 | DESIGNED | §7.2 sparse door (TEI /embed_sparse adapter → sparsevec; provider-adapter, never wire extension; fused as another RRF leg); template variant named | implementation dark until a quality case demands it |
 | R-034 | DESIGNED | §8 consumer contract (pure OpenAI embeddings wire, batch discipline via registry config, registry-only model access — mechanically enforced by check-coverage's grep); DR-01/DR-07 | the gem itself → implementation arc entry 0 |
