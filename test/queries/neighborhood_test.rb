@@ -46,4 +46,27 @@ class NeighborhoodQueryTest < Minitest::Test
     rows = @query.hood(@k1, user_id: @user_id, quest_id: @quest_id, radius: 1)
     refute rows.any? { |r| r[:node_id] == k3 }, "radius 1 stops at the parent"
   end
+
+  # The I17 fix (judge Finding 7): the WALKED node carries its OWN node_kind
+  # (the parent's kind labeled every node before). A claim→evidence edge
+  # must surface the evidence node as kind 'evidence', and the evidence→source
+  # leg as kind 'source' — the cross_kind walk.
+  def test_cross_kind_walk_labels_each_walked_node_with_its_own_kind
+    text = "the span text"
+    source = mint_source(snapshot: text)
+    evidence_id = conn[:evidence].insert(
+      user_id: @user_id, quest_id: @quest_id, source_id: source[:id],
+      source_anchorable: true, snapshot_char_count: text.length,
+      span_start: 0, span_end: text.length, span_text: text, reading: "the reading"
+    )
+    conn[:evidence_edges].insert(user_id: @user_id, quest_id: @quest_id,
+                                 evidence_id: evidence_id, claim_id: @k1,
+                                 relation: "supports", position: 1)
+    rows = @query.hood(@k1, user_id: @user_id, quest_id: @quest_id, radius: 2)
+    kinds = rows.to_h { |r| [r[:node_id], r[:node_kind]] }
+    assert_equal "claim", kinds[@k1], "the center is a claim"
+    assert_equal "claim", kinds[@k2], "the derivation parent is a claim"
+    assert_equal "evidence", kinds[evidence_id],
+                 "the cross_kind edge labels the walked evidence node with ITS OWN kind"
+  end
 end

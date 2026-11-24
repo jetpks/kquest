@@ -75,15 +75,16 @@ describe('Quests/Show', () => {
     expect(hrefs).toContain('/quests/q1/report')
   })
 
-  it('posts the lifecycle door through the csrf idiom and never renders console/briefing stubs', () => {
+  it('posts the lifecycle door through the csrf idiom and renders the I17 console/briefing links', () => {
     const { container } = renderPage()
     const forms = Array.from(container.querySelectorAll('form'))
     expect(forms.map((f) => f.getAttribute('action'))).toEqual([
       '/quests/q1/pause', '/quests/q1/resume', '/quests/q1/archive',
     ])
     expect(forms[0].querySelector('input[name="authenticity_token"]')).not.toBeNull()
-    expect(container.textContent).not.toContain('/console')
-    expect(container.textContent).not.toContain('/briefing')
+    const hrefs = Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'))
+    expect(hrefs).toContain('/quests/q1/console')
+    expect(hrefs).toContain('/quests/q1/briefing')
   })
 
   it('mounts the EventFeed on the I15 frozen stream URL', () => {

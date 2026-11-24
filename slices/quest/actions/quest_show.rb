@@ -67,8 +67,10 @@ module Quest
       end
 
       # The parity block's fields (I05 §5): through StatusSnapshot.quest_fields
-      # when the owner's latest session exists; else the SAME derivations
-      # inlined — #quest_fields requires a session_id (writer segment) and a
+      # when the owner's latest session exists; else the SESSIONLESS variant
+      # (I17 Part 0.3 — the same derivations, extracted verbatim into
+      # Kquest::Queries::StatusSnapshot.quest_fields_sessionless; no second
+      # SQL copy). #quest_fields requires a session_id (writer segment) and a
       # row owned by the requesting user, and the read surfaces must render
       # without either (pre-briefing quests; public-source viewers). Both
       # paths compose through the SHARED QuestStatus.line — never a copy.
@@ -78,28 +80,10 @@ module Quest
             .quest_fields(user_id: user_id, quest_id: quest.fetch(:id),
                           session_id: session.fetch(:id))
         else
-          derived_fields(quest, session)
+          Kquest::Queries::StatusSnapshot.quest_fields_sessionless(
+            conn, quest_id: quest.fetch(:id), session: session
+          )
         end
-      end
-
-      def derived_fields(quest, session)
-        qid = quest.fetch(:id)
-        phase = session && conn[:phases].where(id: session.fetch(:phase_id)).first
-        spend_used = conn[:usage_events].where(quest_id: qid).sum(:cost_usd) || BigDecimal("0")
-        {
-          quest: quest.fetch(:state),
-          phase: phase && "#{phase.fetch(:kind)}(#{phase.fetch(:round_no)}/#{phase.fetch(:attempt_no)})",
-          writer: session && "session/#{session.fetch(:id).to_s[0, 4]}",
-          web_used: conn[:tool_calls].where(quest_id: qid, ok: true)
-                                     .where(Sequel[:tool_calls][:tool] => %w[web_search web_fetch]).count,
-          web_cap: quest.fetch(:web_call_budget),
-          tokens_used: conn[:usage_events].where(quest_id: qid)
-                                          .sum(Sequel.lit("input_tokens + output_tokens + " \
-                                                          "cache_read_tokens + cache_write_tokens")) || 0,
-          tokens_cap: quest.fetch(:token_budget),
-          spend_used: BigDecimal(spend_used.to_s),
-          spend_cap: quest.fetch(:spend_budget_usd)
-        }
       end
 
       # The listings (L15): principled deterministic order + the config cap +

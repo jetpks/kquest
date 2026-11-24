@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/card'
 import AppLayout from '@/layouts/AppLayout'
 import EventFeed from '@/components/EventFeed'
+import ShowingOf from '@/components/ShowingOf'
 import { CappedListing, MetricsFamily, OverhangRow, QuestRow, SharedProps } from '@/types'
 
 // The DASHBOARD (I08 §4 row 1 / I16 Part 3) — the root landing surface.
@@ -155,12 +156,9 @@ export default function Index() {
   )
 }
 
-// L15: "showing N of M" — never silent truncation.
-export function ShowingOf({ listing }: { listing?: CappedListing<unknown> }) {
-  if (!listing || listing.requested <= listing.cap) return null
-  return (
-    <p className="text-xs text-muted-foreground" data-testid="showing-of">
-      showing {listing.rows.length} of {listing.requested}
-    </p>
-  )
-}
+// The F10 move (I17): the shared "showing N of M" caption lives in
+// components/ShowingOf.tsx — the definition above is gone; Dashboard imports
+// it from there. The re-export is a compat shim for the ONE legacy consumer
+// outside the I17 touch set (pages/Costs/Index.tsx); new surfaces import the
+// component directly.
+export { default as ShowingOf } from '@/components/ShowingOf'

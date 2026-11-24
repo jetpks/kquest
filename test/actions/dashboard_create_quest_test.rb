@@ -89,6 +89,20 @@ class DashboardCreateQuestTest < Minitest::Test
     assert_equal before, conn[:quests].count
   end
 
+  def test_negative_budgets_are_422_never_a_db_check_500
+    sign_in_as_owner
+    before = conn[:quests].count
+    status, _, body = post("/quests", params: {topic: "negative budgets",
+                                               web_call_budget: -1, token_budget: -5,
+                                               spend_budget_usd: "-2.50"})
+    assert_equal 422, status, "I17 Part 8 (judge Finding 8): the teaching 422"
+    errors = Array(body).join
+    assert_includes errors, "web_call_budget must not be negative"
+    assert_includes errors, "token_budget must not be negative"
+    assert_includes errors, "spend_budget_usd must not be negative"
+    assert_equal before, conn[:quests].count, "no row behind the refusal"
+  end
+
   def test_anonymous_post_redirects_to_sign_in_without_creating
     before = conn[:quests].count
     status, = post("/quests", params: {topic: "nope", web_call_budget: 1, token_budget: 1,

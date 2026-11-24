@@ -67,6 +67,37 @@ module Kquest
           spend_used: BigDecimal(spend_used.to_s), spend_cap: quest.fetch(:spend_budget_usd)
         }
       end
+
+      # The SESSIONLESS parity variant (I17 Part 0.3, the F6 extraction): the
+      # three budget lines + quest state derived with NO session-bearing
+      # query — the SQL shape quest_show.rb#derived_fields carried, extracted
+      # VERBATIM (no second SQL copy; the I14 composed-constants law). The
+      # optional session kwarg preserves the landed viewer degradation
+      # (phase/writer from the latest session when one exists — the quest
+      # view's behavior byte-preserved); the console composes without it.
+      # Both callers render through the SHARED QuestStatus.line —
+      # byte-faithfulness by construction.
+      def self.quest_fields_sessionless(conn, quest_id:, session: nil)
+        quest = conn[:quests].where(id: quest_id).first
+        raise Kquest::Engine::Error, "quest #{quest_id} not found" unless quest
+
+        phase = session && conn[:phases].where(id: session[:phase_id]).first
+        spend_used = conn[:usage_events].where(quest_id: quest_id).sum(:cost_usd) || BigDecimal("0")
+        {
+          quest: quest.fetch(:state),
+          phase: phase && "#{phase.fetch(:kind)}(#{phase.fetch(:round_no)}/#{phase.fetch(:attempt_no)})",
+          writer: session && "session/#{session[:id].to_s[0, 4]}",
+          web_used: conn[:tool_calls].where(quest_id: quest_id, ok: true)
+                                     .where(Sequel[:tool_calls][:tool] => %w[web_search web_fetch]).count,
+          web_cap: quest.fetch(:web_call_budget),
+          tokens_used: conn[:usage_events].where(quest_id: quest_id)
+                                          .sum(Sequel.lit("input_tokens + output_tokens + " \
+                                                          "cache_read_tokens + cache_write_tokens")) || 0,
+          tokens_cap: quest.fetch(:token_budget),
+          spend_used: BigDecimal(spend_used.to_s),
+          spend_cap: quest.fetch(:spend_budget_usd)
+        }
+      end
     end
   end
 end

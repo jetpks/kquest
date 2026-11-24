@@ -9,7 +9,7 @@ import {
 import { csrfToken } from '@/lib/csrf'
 import AppLayout from '@/layouts/AppLayout'
 import EventFeed from '@/components/EventFeed'
-import { ShowingOf } from '@/pages/Dashboard/Index'
+import ShowingOf from '@/components/ShowingOf'
 import {
   CappedListing,
   LifecycleEvent,
@@ -24,8 +24,10 @@ import {
 // capped lifecycle ledger / sessions / phases, the counters, the read-only
 // config, the fingerprint, and the live feed on the I15 FROZEN stream URL.
 // The lifecycle door: pause (the ONLY door while running, D5), resume,
-// archive — native form POSTs riding the landed csrf.ts idiom. The
-// console/briefing links are I17's and are NOT rendered.
+// archive — native form POSTs riding the landed csrf.ts idiom. The I17
+// addition (additive — the landed render is byte-preserved): the console +
+// briefing links (URLs constructed from the quest id) and the ShowingOf
+// import through the moved component.
 export type QuestShowProps = {
   quest: QuestRow
   parity_line: string
@@ -152,6 +154,8 @@ export default function Show() {
           <a href={p.frontier_url} className="underline">Frontier inspector</a>
           <a href={p.graph_url} className="underline">Graph browser</a>
           <a href={p.report_url} className="underline">Report view</a>
+          <a href={`/quests/${p.quest.id}/console`} className="underline">Console</a>
+          <a href={`/quests/${p.quest.id}/briefing`} className="underline">Briefing</a>
           {current_user && <span className="text-muted-foreground">signed in as {current_user.username}</span>}
         </section>
 

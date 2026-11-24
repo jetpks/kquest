@@ -1,15 +1,19 @@
 import { Head, usePage } from '@inertiajs/react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import AppLayout from '@/layouts/AppLayout'
-import { ShowingOf } from '@/pages/Dashboard/Index'
+import { csrfToken } from '@/lib/csrf'
+import ShowingOf from '@/components/ShowingOf'
 import { CappedListing, SharedProps } from '@/types'
 
 // The GRAPH BROWSER (I08 §4 row 4 / I16 Part 6): claims/evidence/edges/
 // derivations capped; closure status per claim; lineage; the CROSS-QUEST HUB
 // tab (reuse + type-divergence rows over v_canonical_claims); the
-// conflicts-ledger docket READ-ONLY (adjudication is I17's). Traversal is
+// conflicts-ledger docket with the I17 courtroom write forms (additive — the
+// landed read render is byte-preserved): ledger a conflict (the docket's
+// first act) + hypothesize/adjudicate per conflict — session-bearing
+// (I17 Part 4), the teaching refusals ride the server action. Traversal is
 // Inertia-native: ?node=<claim_id> adds the node's neighborhood + derivation
-// paths through the canonical query services. All writes here are I17's.
+// paths through the canonical query services.
 export type ClaimRow = {
   id: string
   quest_seq: number
@@ -101,18 +105,43 @@ export default function Browser() {
         </section>
 
         <section data-testid="conflicts-docket">
-          <h2 className="text-lg font-semibold">Conflicts docket (read-only)</h2>
+          <h2 className="text-lg font-semibold">Conflicts docket</h2>
           {p.conflicts.conflicts.rows.map((c) => (
             <Card key={c.id}>
               <CardHeader>
                 <CardTitle className="text-sm">{c.divergence}</CardTitle>
               </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                {c.resolution_hypothesis ?? 'no hypothesis yet — adjudication is I17\u2019s'}
+              <CardContent className="space-y-2 text-sm text-muted-foreground">
+                {c.resolution_hypothesis ?? 'no hypothesis yet — hypothesize to adjudicate'}
+                <form method="post"
+                      action={`/quests/${questId}/graph/conflicts/${c.id}/hypothesis`}
+                      className="flex gap-2">
+                  <input type="hidden" name="authenticity_token" value={csrfToken()} />
+                  <input name="hypothesis" placeholder="the resolution hypothesis (non-empty)"
+                         className="w-80 rounded border px-2 py-1 text-sm" />
+                  <button type="submit" className="rounded border px-2 py-1 text-sm">
+                    Hypothesize
+                  </button>
+                </form>
               </CardContent>
             </Card>
           ))}
           <ShowingOf listing={p.conflicts.conflicts} />
+          <form data-testid="conflict-ledger-form" method="post"
+                action={`/quests/${questId}/graph/conflicts`}
+                className="mt-2 space-y-2 rounded border p-3 text-sm">
+            <div className="font-medium">Ledger a conflict (the courtroom's first act)</div>
+            <input type="hidden" name="authenticity_token" value={csrfToken()} />
+            <input name="claim_id" placeholder="the claim id"
+                   className="w-80 rounded border px-2 py-1 text-sm" />
+            <input name="divergence" placeholder="the divergence (non-empty)"
+                   className="w-96 rounded border px-2 py-1 text-sm" />
+            <input name="hypothesis" placeholder="hypothesis (optional)"
+                   className="w-96 rounded border px-2 py-1 text-sm" />
+            <input name="source_urns[]" placeholder="exhibit source urn (repeatable)"
+                   className="w-96 rounded border px-2 py-1 text-sm" />
+            <button type="submit" className="rounded border px-2 py-1 text-sm">Ledger</button>
+          </form>
         </section>
 
         <section data-testid="lineage" className="text-sm text-muted-foreground">

@@ -80,4 +80,36 @@ describe('Reports/Show', () => {
     expect(container.textContent).toContain('SR-02 at phase 3 (descent)')
     expect(container.textContent).toContain('route: route-to-synthesis')
   })
+
+  it('renders the I17 write forms: draft, bind, the per-version flip, and the explicit import mark', () => {
+    const { container } = renderPage({
+      versions: {
+        rows: [
+          { id: 'v1', version_seq: 1, standing: true, bound_at: 't', binding_pass: 'i02-9/i14', model: 'm', quest_fingerprint: 'a', body_url: '/b1' },
+          { id: 'v2', version_seq: 2, standing: false, bound_at: 't', binding_pass: 'i02-9/i14', model: 'm', quest_fingerprint: 'a', body_url: '/b2' },
+          { id: 'v3', version_seq: 3, standing: false, bound_at: null, binding_pass: null, model: 'm', quest_fingerprint: 'a', body_url: '/b3' },
+        ],
+        requested: 3, cap: 50, existed: 3,
+      },
+    })
+    const actions = Array.from(container.querySelectorAll('form')).map((f) => f.getAttribute('action'))
+    const draft = container.querySelector('[data-testid="draft-form"]')!
+    expect(draft.getAttribute('action')).toContain('/report/draft')
+    expect(draft.querySelector('input[name="authenticity_token"]')).not.toBeNull()
+    for (const name of ['section', 'version', 'body']) {
+      expect(draft.querySelector(`[name="${name}"]`)).not.toBeNull()
+    }
+    expect(actions.filter((a) => a!.endsWith('/report/bind')).length).toBe(1)
+    // the flip rides ONLY a bound, non-standing version (v2): a draft cannot stand
+    const flips = actions.filter((a) => a!.match(/\/report\/versions\/2\/flip$/))
+    expect(flips.length).toBe(1)
+    expect(actions.filter((a) => a!.match(/\/report\/versions\/3\/flip$/)).length).toBe(0)
+    expect(actions.filter((a) => a!.match(/\/report\/versions\/1\/flip$/)).length).toBe(0)
+    const importMark = container.querySelector('[data-testid="import-mark-form"]')!
+    expect(importMark.getAttribute('action')).toContain('/citations/')
+    expect(importMark.getAttribute('action')).toContain('/import')
+    for (const name of ['version_seq', 'ordinal', 'source_urn', 'origin_quest_id']) {
+      expect(importMark.querySelector(`[name="${name}"]`)).not.toBeNull()
+    }
+  })
 })

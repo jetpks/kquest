@@ -52,11 +52,21 @@ describe('Graph/Browser', () => {
     expect(href).toContain('/graph?node=c1')
   })
 
-  it('renders the read-only conflicts docket naming I17 for adjudication', () => {
+  it('renders the conflicts docket with the I17 courtroom write forms', () => {
     const { container } = renderPage()
     const text = container.textContent ?? ''
     expect(text).toContain('the sources disagree')
-    expect(text).toContain('adjudication is I17')
+    expect(text).toContain('Ledger a conflict')
+    const ledger = container.querySelector('[data-testid="conflict-ledger-form"]')!
+    expect(ledger.getAttribute('action')).toBe('/quests//graph/conflicts')
+    expect(ledger.querySelector('input[name="authenticity_token"]')).not.toBeNull()
+    for (const name of ['claim_id', 'divergence', 'hypothesis', 'source_urns[]']) {
+      expect(ledger.querySelector(`input[name="${name}"]`)).not.toBeNull()
+    }
+    const hypothesisForm = Array.from(container.querySelectorAll('form')).find(
+      (f) => f.getAttribute('action') === '/quests//graph/conflicts/cf1/hypothesis'
+    )!
+    expect(hypothesisForm.querySelector('input[name="hypothesis"]')).not.toBeNull()
   })
 
   it('renders the node traversal (neighborhood + derivation paths) when ?node= is present', () => {

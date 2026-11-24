@@ -237,7 +237,12 @@ UI_LISTING_CAPS = {
   "ui.listing_cap.graph"     => [50, "I16 Part 0.2 (the graph browser's node/evidence lists)"],
   "ui.listing_cap.reports"   => [50, "I16 Part 0.2 (the report view's version chain)"],
   "ui.listing_cap.costs"     => [100, "I16 Part 0.2 (the costs ledger rows; flat usage rows run long)"],
-  "ui.listing_cap.alerts"    => [20, "I16 Part 0.2 (per-predicate fire sets; a longer set is the overhang story)"]
+  "ui.listing_cap.alerts"    => [20, "I16 Part 0.2 (per-predicate fire sets; a longer set is the overhang story)"],
+  # The I17 surfaces (Part 0.2's own law — the console's and briefing's
+  # listings cap too; CappedListing raises on an unknown surface, so these
+  # rows are load-bearing, not decorative):
+  "ui.listing_cap.console"   => [50, "I17 Part 1 (the console's ladder/lifecycle/mute listings; one screen's worth per surface)"],
+  "ui.listing_cap.briefing"  => [30, "I17 Part 3 (the briefing's agenda list; staged docs per session run short)"]
 }.freeze
 
 conn.transaction do

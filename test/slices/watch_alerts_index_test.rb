@@ -108,6 +108,26 @@ class WatchAlertsIndexTest < Minitest::Test
     conn[:tool_config].where(Sequel.like(:key, "alerts.mute.%")).delete
   end
 
+  def test_the_mute_is_a_display_filter_only_on_the_fire_sets
+    # The I17 console's mute rows (key `alerts.mute.<quest_id>.<predicate>`)
+    # exclude the (quest, predicate) from that predicate's listing — and
+    # nothing else: the signal's view row still exists (removal restores it),
+    # the ledger rows, the streams, and /metrics are untouched.
+    mint_wedge_fire
+    conn[:tool_config].insert(key: "alerts.mute.#{@tenancy[:quest_id]}.tw_wedge",
+                              text_value: "muted by the operator", provenance: "test data")
+    _, _, body = inertia_get("/alerts")
+    wedge = parse_json(body)["props"]["fire_sets"].find { |fs| fs["predicate"] == "tw_wedge" }
+    assert_empty wedge["listing"]["rows"], "the muted (quest, predicate) is excluded"
+    conn[:tool_config].where(Sequel.like(:key, "alerts.mute.%")).delete
+    _, _, body = inertia_get("/alerts")
+    wedge = parse_json(body)["props"]["fire_sets"].find { |fs| fs["predicate"] == "tw_wedge" }
+    assert_equal 1, wedge["listing"]["rows"].size,
+                 "removal restores the signal — a display filter, never a deletion"
+  ensure
+    conn[:tool_config].where(Sequel.like(:key, "alerts.mute.%")).delete
+  end
+
   def test_stream_url_is_the_user_level_stream
     _, _, body = inertia_get("/alerts")
     assert_equal "/alerts/stream", parse_json(body)["props"]["stream_url"]

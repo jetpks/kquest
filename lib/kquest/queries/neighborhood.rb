@@ -35,7 +35,11 @@ module Kquest
             SELECT 'claim', c.id, 0 FROM claims c
             WHERE c.id = :center_id AND c.user_id = :user_id AND c.quest_id = :quest_id
             UNION
-            SELECT h.node_kind, e.next_id, h.depth + 1
+            -- the WALKED node carries its OWN kind (e.next_kind — the
+            -- parent's kind labeled every node before the I17 fix; judge
+            -- Finding 7): routing still reads h.node_kind (what the parent
+            -- IS), labeling reads next_kind (what the child IS).
+            SELECT e.next_kind, e.next_id, h.depth + 1
             FROM hood h
             JOIN LATERAL (
               SELECT 'claim' AS next_kind, d.parent_claim_id AS next_id
