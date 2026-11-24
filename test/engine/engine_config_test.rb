@@ -60,8 +60,15 @@ class EngineConfigTest < Minitest::Test
   def test_all_engine_config_lines_are_advisory_by_default
     modes = conn[:engine_config].to_a.map { |r| [r[:key], r[:mode]] }.to_h
     FROZEN_KEYS.each_key do |key|
+      # I05 DR-04 ruling A — read_slice is hard-for-this-line; flipped at I14
+      # per the frozen AC9; driver-ruled 79th touch 2026-11-24. Every OTHER
+      # line keeps the advisory-by-default assertion (DR-09).
+      next if key == "engine.read_slice_cap_chars"
+
       assert_equal "advisory", modes[key], "DR-09: advisory by default, toggleable to hard"
     end
+    assert_equal "hard", modes["engine.read_slice_cap_chars"],
+                 "I05 DR-04 ruling A: read_slice ships hard (the ONE amended line)"
     modes.each_value do |mode|
       assert %w[advisory hard].include?(mode)
     end

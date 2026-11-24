@@ -794,6 +794,23 @@ CREATE TABLE public.tool_calls (
 
 
 --
+-- Name: tool_config; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.tool_config (
+    key text NOT NULL,
+    num_value numeric,
+    text_value text,
+    provenance text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ck_tool_config_exactly_one CHECK (((num_value IS NULL) <> (text_value IS NULL))),
+    CONSTRAINT ck_tool_config_key_nonempty CHECK ((char_length(btrim(key)) > 0)),
+    CONSTRAINT ck_tool_config_num_nonneg CHECK (((num_value IS NULL) OR (num_value >= (0)::numeric))),
+    CONSTRAINT ck_tool_config_provenance_nonempty CHECK ((char_length(btrim(provenance)) > 0))
+);
+
+
+--
 -- Name: usage_events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1101,6 +1118,24 @@ CREATE VIEW public.v_resource_visibility AS
 
 
 --
+-- Name: web_providers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.web_providers (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    base_url text NOT NULL,
+    api_key_ref text,
+    params jsonb,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ck_web_providers_api_key_ref CHECK (((api_key_ref IS NULL) OR (api_key_ref ~ '^env:[A-Za-z_][A-Za-z0-9_]*$'::text))),
+    CONSTRAINT ck_web_providers_base_url_http CHECK ((base_url ~ '^https?://'::text)),
+    CONSTRAINT ck_web_providers_base_url_nonempty CHECK ((char_length(btrim(base_url)) > 0)),
+    CONSTRAINT ck_web_providers_name_nonempty CHECK ((char_length(btrim(name)) > 0))
+);
+
+
+--
 -- Name: workspace_members; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1378,6 +1413,14 @@ ALTER TABLE ONLY public.subagent_profiles
 
 ALTER TABLE ONLY public.tool_calls
     ADD CONSTRAINT tool_calls_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: tool_config tool_config_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tool_config
+    ADD CONSTRAINT tool_config_pkey PRIMARY KEY (key);
 
 
 --
@@ -1757,6 +1800,14 @@ ALTER TABLE ONLY public.users
 
 
 --
+-- Name: web_providers uq_web_providers_name; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.web_providers
+    ADD CONSTRAINT uq_web_providers_name UNIQUE (name);
+
+
+--
 -- Name: workspaces uq_workspaces_name; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1778,6 +1829,14 @@ ALTER TABLE ONLY public.usage_events
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: web_providers web_providers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.web_providers
+    ADD CONSTRAINT web_providers_pkey PRIMARY KEY (id);
 
 
 --
@@ -2631,4 +2690,5 @@ INSERT INTO schema_migrations (filename) VALUES
 ('20261124000005_add_ladder_passes.rb'),
 ('20261124000006_add_users_auth_columns.rb'),
 ('20261124000007_add_quest_process_config_tables.rb'),
-('20261124000008_add_engine_config_i04.rb');
+('20261124000008_add_engine_config_i04.rb'),
+('20261124000009_add_tool_config_i05.rb');

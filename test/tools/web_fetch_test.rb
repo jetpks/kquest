@@ -1,0 +1,73 @@
+# frozen_string_literal: true
+
+require_relative "texts_test"
+require_relative "../support/mock_exa_server"
+
+# web_fetch — fetch + save through the landed FetchBody (auto-indexing in
+# ONE transaction); duplicate-fetch refuses re-fetches.
+class WebFetchTest < Minitest::Test
+  include ToolRig
+
+  FIXTURE = File.expand_path("../../design/I05-tool-surface/artifacts/fixtures/web_fetch.md", __dir__)
+
+  def setup
+    mint
+    @mock = MockExaServer.new.start
+    conn[:web_providers].where(name: "test-provider").delete
+    conn[:web_providers].insert(name: "test-provider", base_url: @mock.url, api_key_ref: nil)
+    conn[:tool_config].where(key: "tools.web_provider").delete
+    conn[:tool_config].insert(key: "tools.web_provider", text_value: "test-provider",
+                              provenance: "test-minted config data")
+    @tool = build_tool("web_fetch")
+  end
+
+  def teardown
+    super
+    @mock&.stop
+  end
+
+  def test_fetch_save_registers_source_anchorable_in_the_same_session
+    @mock.script([{type: :results, results: [{url: "https://example.test/page",
+                                              title: "A fetched page",
+                                              text: "the fetched snapshot body"}]}])
+    answer = execute_tool(@tool, url: "https://example.test/page")
+
+    source = conn[:sources].where(user_id: @user_id).first
+    refute_nil source, "the sources row landed"
+    assert_equal "citable", source[:role]
+    assert source[:anchorable], "anchorable in the SAME session"
+    membership = conn[:quest_sources].where(quest_id: @quest_id, source_id: source[:id]).first
+    refute_nil membership, "the quest membership row landed in the SAME transaction"
+
+    # the answer carries the frozen shape
+    assert_match(/\Aweb_fetch: saved C\d+ \[kb:src:\w+\] "A fetched page" \d+ chars — anchorable now/, answer)
+    assert_includes answer, "web_calls=1/16"
+  end
+
+  def test_duplicate_fetch_refusal_byte_matched
+    @mock.script([{type: :results, results: [{url: "https://example.test/page", title: "A page",
+                                              text: "body"}]}])
+    execute_tool(@tool, url: "https://example.test/page")
+    c_id = "C1"
+
+    assert_refusal("web_fetch", "duplicate-fetch",
+                   slots: {src: c_id, title_seg: "\"A page\" — never re-fetch"},
+                   planted: [c_id]) do
+      execute_tool(@tool, url: "https://example.test/page")
+    end
+  end
+
+  def test_budget_refusal_before_the_wire
+    conn[:quests].where(id: @quest_id).update(web_call_budget: 0)
+    conn[:engine_config].insert(key: "engine.web_call_budget", value: 0, mode: "hard",
+                                provenance: "test-minted budget line")
+    cfg = Kquest::Engine.config(conn)
+    tool = build_tool("web_fetch", config: cfg)
+
+    assert_refusal("web_fetch", "budget-exceeded",
+                   slots: {line: "web_calls=0/0, mode=hard"}, planted: ["mode=hard"]) do
+      execute_tool(tool, url: "https://example.test/never")
+    end
+    assert @mock.captured_requests.empty?
+  end
+end
