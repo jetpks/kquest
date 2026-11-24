@@ -46,6 +46,16 @@ describe('Frontier/Index', () => {
     expect(text).toContain('a primary on X')
   })
 
+  it('renders the hand-add form posting the I17 route with the csrf idiom', () => {
+    const { container } = renderPage()
+    const form = container.querySelector('[data-testid="hand-add-form"] form')!
+    expect(form.getAttribute('action')).toBe('/quests//frontier/add')
+    expect(form.querySelector('input[name="authenticity_token"]')).not.toBeNull()
+    for (const name of ['claim', 'need', 'uncertainty', 'relevance']) {
+      expect(form.querySelector(`input[name="${name}"]`)).not.toBeNull()
+    }
+  })
+
   it('surfaces "showing N of M" (never silent truncation)', () => {
     const { container } = renderPage()
     expect(container.textContent).toContain('showing 1 of 80')

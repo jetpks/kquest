@@ -1,14 +1,16 @@
 import { Head, usePage } from '@inertiajs/react'
 import { Card, CardContent } from '@/components/ui/card'
+import { csrfToken } from '@/lib/csrf'
 import AppLayout from '@/layouts/AppLayout'
-import { ShowingOf } from '@/pages/Dashboard/Index'
+import ShowingOf from '@/components/ShowingOf'
 import { CappedListing, OverhangRow, SharedProps } from '@/types'
 
 // The FRONTIER INSPECTOR (I08 §4 row 3 / I16 Part 5): the open/total + mass
 // fuse reading, closure classes, aging bands, the OVERHANG BADGE, server-side
 // filter/sort (mass decile / age / state), ALL CAPPED with "showing N of M".
-// The hand-add write is I17's (session-bearing) — read-only surface + the CSV
-// snapshot link.
+// The I17 addition (additive — the landed read render is byte-preserved):
+// the hand-add form (I17 Part 4 — session-bearing through the LANDED
+// frontier_add tool; the tool's refusals apply verbatim, teaching).
 export type FrontierEntry = {
   entry_id: string
   claim_seq: number
@@ -48,6 +50,21 @@ export default function Index() {
               overhang: {p.overhang.overhang} ({p.overhang.capped_requests} capped request(s))
             </span>
           )}
+        </section>
+
+        <section data-testid="hand-add-form" className="space-y-2">
+          <h2 className="text-lg font-semibold">Hand-add a frontier entry</h2>
+          <form method="post" action={`/quests/${questId}/frontier/add`} className="space-y-2 text-sm">
+            <input type="hidden" name="authenticity_token" value={csrfToken()} />
+            <input name="claim" placeholder="the claim (K-alias or urn)" className="rounded border px-2 py-1 text-sm" />
+            <input name="need" placeholder="the need — names the underlying study (authors, year, venue)"
+                   className="w-96 rounded border px-2 py-1 text-sm" />
+            <input name="uncertainty" type="number" min="1" max="5" placeholder="uncertainty 1–5"
+                   className="rounded border px-2 py-1 text-sm" />
+            <input name="relevance" type="number" min="1" max="5" placeholder="relevance 1–5"
+                   className="rounded border px-2 py-1 text-sm" />
+            <button type="submit" className="rounded border px-2 py-1 text-sm">Hand-add</button>
+          </form>
         </section>
 
         <section data-testid="filters" className="space-x-2 text-sm">

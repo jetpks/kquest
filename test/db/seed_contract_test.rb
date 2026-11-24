@@ -77,14 +77,25 @@ class SeedContractTest < Minitest::Test
   # The I16 UI listing caps (L15): one `ui.listing_cap.<surface>` row per
   # capped read surface — config is the ONLY cap source
   # (Kquest::Ui::CappedListing raises without it). The F1 dead rows
-  # (tools.web_search_cap / tools.report_section_chars_cap) are GONE.
+  # (tools.web_search_cap / tools.report_section_chars_cap) are GONE. The
+  # I17 surfaces (console, briefing) ride the same discipline — the provenance
+  # names the iteration that authored the cap (the F1-class law: the
+  # provenance names its own spec part, never a false one).
   def test_ui_listing_cap_rows_carry_provenance_and_the_f1_rows_are_gone
     rows = conn[:tool_config].where(Sequel.like(:key, "ui.listing_cap.%"))
     surfaces = rows.select_map(:key).map { |k| k.delete_prefix("ui.listing_cap.") }
-    assert_equal %w[alerts costs dashboard frontier graph quest reports].sort, surfaces.sort
+    assert_equal %w[alerts briefing console costs dashboard frontier graph quest reports].sort,
+                 surfaces.sort
     rows.each do |row|
       assert row[:num_value] && row[:num_value].positive?, "#{row[:key]} carries a numeric cap"
-      assert_match "I16 Part 0.2", row[:provenance], "the cap row's provenance"
+      expected = if row[:key].end_with?(".console")
+                   "I17 Part 1"
+                 elsif row[:key].end_with?(".briefing")
+                   "I17 Part 3"
+                 else
+                   "I16 Part 0.2"
+                 end
+      assert_match expected, row[:provenance], "the cap row's provenance names its authoring part"
     end
     assert_empty conn[:tool_config].where(key: %w[tools.web_search_cap
                                                  tools.report_section_chars_cap]),

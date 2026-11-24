@@ -49,4 +49,36 @@ class StatusSnapshotQueryTest < Minitest::Test
     assert_equal 1500, q[:tokens_used]
     assert_equal 1_000_000, q[:tokens_cap]
   end
+
+  # The SESSIONLESS variant (I17 Part 0.3, the F6 extraction): the three
+  # budget lines + quest state with NO session — the exact fields the
+  # session-bearing variant derives, through the SAME SQL shape (one copy).
+  def test_sessionless_variant_derives_the_budget_lines_without_a_session
+    conn[:tool_calls].insert(user_id: @user_id, quest_id: @quest_id, session_id: @session[:id],
+                             seq: 1, tool: "web_fetch", args: "{}", result: "{}", ok: true)
+    conn[:usage_events].insert(user_id: @user_id, quest_id: @quest_id, phase_id: @session[:phase_id],
+                               session_id: @session[:id], kind: "llm", model: "test-model",
+                               input_tokens: 2500, output_tokens: 500, cost_usd: 0.25)
+    q = Kquest::Queries::StatusSnapshot.quest_fields_sessionless(conn, quest_id: @quest_id)
+    assert_equal %w[phase quest spend_cap spend_used tokens_cap tokens_used web_cap web_used
+                    writer], q.keys.map(&:to_s).sort
+    assert_equal "active", q[:quest]
+    assert_nil q[:phase], "no session — phase degrades"
+    assert_nil q[:writer], "no session — writer degrades"
+    assert_equal 1, q[:web_used]
+    assert_equal 16, q[:web_cap]
+    assert_equal 3000, q[:tokens_used]
+    assert_equal 1_000_000, q[:tokens_cap]
+    assert_equal BigDecimal("0.25"), q[:spend_used]
+  end
+
+  # The optional session kwarg preserves the quest view's landed degradation
+  # byte-for-byte (the public viewer sees the latest session's phase/writer).
+  def test_sessionless_variant_degrades_phase_and_writer_from_the_passed_session
+    q = Kquest::Queries::StatusSnapshot.quest_fields_sessionless(
+      conn, quest_id: @quest_id, session: {id: @session[:id], phase_id: @session[:phase_id]}
+    )
+    assert_equal "decompose(1/1)", q[:phase]
+    assert_equal "session/#{@session[:id].to_s[0, 4]}", q[:writer]
+  end
 end

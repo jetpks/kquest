@@ -44,14 +44,26 @@ module Kquest
         def conn = gateway.connection
 
         def budget(raw, name, errors)
-          Integer(raw.to_s, 10)
+          value = Integer(raw.to_s, 10)
+          # I17 Part 8 (judge Finding 8): a negative budget is the 422's
+          # teaching line, never a DB CHECK 500.
+          if value.negative?
+            errors << "#{name} must not be negative"
+            return 0
+          end
+          value
         rescue ArgumentError, TypeError
           errors << "#{name} must be an integer"
           0
         end
 
         def spend_budget(raw, errors)
-          BigDecimal(raw.to_s)
+          value = BigDecimal(raw.to_s)
+          if value.negative?
+            errors << "spend_budget_usd must not be negative"
+            return BigDecimal("0")
+          end
+          value
         rescue ArgumentError, TypeError
           errors << "spend_budget_usd must be a decimal"
           BigDecimal("0")

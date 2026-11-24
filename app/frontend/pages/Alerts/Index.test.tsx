@@ -21,8 +21,9 @@ vi.mock('@/components/EventFeed', () => ({
 }))
 
 import Index from './Index'
+import type { AlertsProps } from './Index'
 
-const base = {
+const base: AlertsProps = {
   fire_sets: [
     {
       predicate: 'tw_wedge',
@@ -56,14 +57,37 @@ describe('Alerts/Index', () => {
     expect(text).toContain('no fires')
   })
 
-  it('offers the flash-only acknowledge (UI state only) and no mute control', () => {
+  it('offers the flash-only acknowledge (UI state only) and the I17 mute control', () => {
     const { container } = renderPage()
-    const form = container.querySelector('form')!
-    expect(form.getAttribute('action')).toBe('/alerts/acknowledge')
-    expect(form.querySelector('input[name="predicate"]')!.getAttribute('value')).toBe('tw_wedge')
-    expect(form.querySelector('input[name="authenticity_token"]')).not.toBeNull()
-    expect(container.textContent).not.toContain('mute')
-    expect(container.textContent!.toLowerCase()).not.toContain('/console')
+    const ack = container.querySelector('form')!
+    expect(ack.getAttribute('action')).toBe('/alerts/acknowledge')
+    expect(ack.querySelector('input[name="predicate"]')!.getAttribute('value')).toBe('tw_wedge')
+    expect(ack.querySelector('input[name="authenticity_token"]')).not.toBeNull()
+    // the I17 additions: the mute/unmute control POSTs the console's mute
+    // route (the ONE config-row write, per quest from the quests listing)
+    const mute = container.querySelector('[data-testid="mute-control-q1"]')!
+    expect(mute.getAttribute('action')).toBe('/quests/q1/console/mute')
+    expect(mute.querySelector('input[name="authenticity_token"]')).not.toBeNull()
+    expect(mute.querySelector('button[name="remove"][value="true"]')).not.toBeNull()
+  })
+
+  it('renders the alerting→console pre-load link per fire-set row with a quest', () => {
+    const { container } = renderPage()
+    const hrefs = Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'))
+    expect(hrefs).toContain('/quests/q1/console?alert=tw_wedge')
+  })
+
+  it('renders the mute state panel who/why — never hidden, honest when empty', () => {
+    const empty = renderPage({ mute_state: [] })
+    expect(empty.container.querySelector('[data-testid="mute-state"]')!.textContent)
+      .toContain('none — every signal renders.')
+    const muted = renderPage({
+      mute_state: [{ key: 'alerts.mute.q1.tw_wedge', text_value: 'slow local model',
+                     provenance: 'operator u1 2026-11-25T00:00:00Z — slow local model' }],
+    })
+    const text = muted.container.querySelector('[data-testid="mute-state"]')!.textContent ?? ''
+    expect(text).toContain('alerts.mute.q1.tw_wedge')
+    expect(text).toContain('operator u1 2026-11-25T00:00:00Z — slow local model')
   })
 
   it('renders the reused Metrics panels and the per-quest stream links', () => {

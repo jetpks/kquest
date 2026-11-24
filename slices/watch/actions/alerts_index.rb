@@ -10,7 +10,13 @@ module Watch
     # validator (the I05 §5 law applied to the UI). Every list is capped
     # (L15). The ONE write on this surface is the flash-only acknowledge;
     # the mute is I17's (ALL config-row writes concentrate there) — mute
-    # state renders read-only if rows exist, no control.
+    # state renders (who/why, never hidden) and the fire-set listings APPLY
+    # the mute as a DISPLAY FILTER ONLY (I17 Part 6): rows whose
+    # (quest_id, predicate) carries a mute row are excluded from that
+    # predicate's listing; tw_hub_divergence carries no quest_id and is NOT
+    # muteable — its rows link the adjudication workflow instead. The
+    # console pre-load link data rides each row's quest_id
+    # (/quests/:quest_id/console?alert=<predicate>).
     #
     # NO ENFORCEMENT: nothing here fires, mutes, or blocks on an alert — the
     # map's own law (I08 §3.4): "No consumer of this slot may act
@@ -37,8 +43,11 @@ module Watch
       }.freeze
 
       # tw_churn / tw_repetition key on sessions without a user_id column —
-      # scope them through the user's own session rows.
+      # scope them through the user's own session rows. tw_hub_divergence
+      # carries NO quest_id and is NOT muteable — its rows pass unfiltered
+      # (they link the adjudication workflow instead).
       SESSION_KEYED = %w[tw_churn tw_repetition].freeze
+      NO_QUEST_ID = %w[tw_hub_divergence].freeze
 
       METRICS_PANELS = %w[kquest_refusal_rate_session kquest_refusal_class_census
                           kquest_transcript_audit_bytes kquest_tripwire_fires
@@ -66,12 +75,21 @@ module Watch
       end
 
       def fire_sets(user)
+        muted = muted_pairs
         FIRE_VIEWS.map do |predicate, order|
           dataset = conn[property_name(predicate)]
           dataset = if SESSION_KEYED.include?(predicate)
-                      dataset.where(session_id: conn[:sessions].where(user_id: user.id).select(:id))
-                    else
+                      # quest attribution via the sessions join (the view
+                      # carries session_id only) — then the display filter.
+                      dataset.where(session_id: conn[:sessions]
+                        .where(user_id: user.id)
+                        .exclude(quest_id: muted_quests(muted, predicate))
+                        .select(:id))
+                    elsif NO_QUEST_ID.include?(predicate)
                       dataset.where(user_id: user.id)
+                    else
+                      dataset = dataset.where(user_id: user.id)
+                      muted_quests(muted, predicate).empty? ? dataset : dataset.exclude(quest_id: muted_quests(muted, predicate))
                     end
           {predicate: predicate, listing: capped(dataset, predicate, user)}
         end
@@ -100,11 +118,27 @@ module Watch
         )
       end
 
-      # Mute state renders READ-ONLY if the I17 console ever writes its rows;
-      # this surface offers no mute control (ALL config-row writes are I17's).
+      # Mute state renders who/why — never hidden (the I17 console writes
+      # the rows; this surface's listings apply them as the DISPLAY filter;
+      # the mute/unmute CONTROL posts the console route — I17 Part 6).
       def mute_state(user)
         conn[:tool_config].where(Sequel.like(:key, "alerts.mute.%"))
                           .select(:key, :text_value, :provenance).to_a
+      end
+
+      # The DISPLAY filter's pairs, from the I17 mute rows' frozen key shape
+      # (`alerts.mute.<quest_id>.<predicate>`): [[quest_id, predicate], …].
+      # A DISPLAY FILTER ONLY — the signal's ledger rows, the streams, the
+      # poller, and /metrics are untouched.
+      def muted_pairs
+        conn[:tool_config].where(Sequel.like(:key, "alerts.mute.%")).to_a.map do |row|
+          quest_id, predicate = row.fetch(:key).delete_prefix("alerts.mute.").split(".", 2)
+          [quest_id, predicate]
+        end
+      end
+
+      def muted_quests(muted, predicate)
+        muted.select { |_q, p| p == predicate }.map { |q, _p| q }
       end
     end
   end
