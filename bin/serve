@@ -1,0 +1,11 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Production launcher — execs the supervised web topology in one host process.
+# (The former op://-ref resolution helper died with the I06 cut.)
+#
+# Usage: bin/serve
+
+Dir.chdir(File.expand_path("..", __dir__))
+
+exec("bundle", "exec", "falcon", "host", "falcon.rb")
