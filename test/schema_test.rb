@@ -16,16 +16,20 @@ class SchemaTest < Minitest::Test
   end
 
   def test_users_key_columns
+    assert_equal "uuid", col(:users, :id)[:db_type]
+    assert_equal false,                  col(:users, :handle)[:allow_null]
+    assert_equal false,                  col(:users, :github_uid)[:allow_null]
+    assert_equal false,                  col(:users, :username)[:allow_null]
     assert_equal "timestamp with time zone", col(:users, :created_at)[:db_type]
-    assert_equal false,                     col(:users, :github_uid)[:allow_null]
-    assert_equal false,                     col(:users, :username)[:allow_null]
     assert_equal "timestamp with time zone", col(:users, :updated_at)[:db_type]
   end
 
-  # Exact column set: the auth substrate and nothing else on the user row.
-  def test_users_column_set_is_exactly_the_auth_substrate
+  # Exact column set: the unified tenant root (I11 Part 2) — the I01 law
+  # shape (uuid id, handle, display_name) plus the six additive auth columns.
+  def test_users_column_set_is_the_unified_tenant_root
     columns = conn.schema(:users).map { |col| col.first.to_s }
-    assert_equal %w[avatar_url created_at email github_uid id name updated_at username],
+    assert_equal %w[avatar_url created_at display_name email github_uid handle id
+                    name updated_at username],
                  columns.sort
   end
 

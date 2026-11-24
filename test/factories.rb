@@ -8,6 +8,10 @@ Factory = ROM::Factory.configure do |c|
 end
 
 Factory.define(:user) do |f|
+  # Slug-shaped for the unified tenant-root users law (ck_users_handle:
+  # ^[a-z0-9][a-z0-9_-]{1,31}$) — the same minted shape AuthenticateUser
+  # produces from a uid.
+  f.handle        { "gh-" + Faker::Internet.unique.username.gsub(/[^a-z0-9_-]/, "-")[0, 29] }
   f.github_uid    { Faker::Internet.unique.uuid }
   f.username      { Faker::Internet.unique.username }
   f.name          { Faker::Name.name }
