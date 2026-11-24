@@ -24,7 +24,9 @@ class ReposTest < Minitest::Test
 
   def test_users_crud_round_trip
     user = make_user
-    assert_kind_of Integer, user.id
+    # The unified tenant root: uuid PK (I01 law), not the substrate's Integer.
+    assert_match(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i,
+                 user.id.to_s)
     assert_equal user.username, users_repo.by_pk(user.id).username
     # update
     users_repo.update(user.id, name: "Updated Name")
