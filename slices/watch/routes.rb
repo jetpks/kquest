@@ -7,5 +7,14 @@ module Watch
   class Routes < Hanami::Routes
     get "/quests/:quest_id/stream", to: "quest_stream"
     get "/metrics", to: "metrics"
+
+    # I16 Part 2 + Part 4 (additive — the frozen I15 lines above are the
+    # contract and stay byte-identical): the alerting surface over the 13
+    # tw_* views, the USER-level SSE serving action (the I15 producer's
+    # missing server), and the flash-only acknowledge (UI state, never a
+    # system state).
+    get  "/alerts",           to: "alerts_index"
+    get  "/alerts/stream",    to: "user_stream"
+    post "/alerts/acknowledge", to: "alerts_acknowledge"
   end
 end

@@ -35,6 +35,26 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: cap_records; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cap_records (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    quest_id uuid,
+    surface text NOT NULL,
+    requested integer NOT NULL,
+    cap integer NOT NULL,
+    existed integer NOT NULL,
+    occurred_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ck_cap_records_cap_positive CHECK ((cap > 0)),
+    CONSTRAINT ck_cap_records_existed_nonneg CHECK ((existed >= 0)),
+    CONSTRAINT ck_cap_records_requested_nonneg CHECK ((requested >= 0)),
+    CONSTRAINT ck_cap_records_surface_nonempty CHECK ((char_length(btrim(surface)) > 0))
+);
+
+
+--
 -- Name: chunk_strategies; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1432,6 +1452,14 @@ CREATE TABLE public.workspaces (
 
 
 --
+-- Name: cap_records cap_records_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cap_records
+    ADD CONSTRAINT cap_records_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: chunk_strategies chunk_strategies_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2120,6 +2148,13 @@ ALTER TABLE ONLY public.workspaces
 
 
 --
+-- Name: idx_cap_records_user_surface; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cap_records_user_surface ON public.cap_records USING btree (user_id, surface, occurred_at);
+
+
+--
 -- Name: idx_chunks_search_tsv; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2383,6 +2418,22 @@ CREATE UNIQUE INDEX uq_quest_lifecycle_archive_once ON public.quest_lifecycle_ev
 --
 
 CREATE UNIQUE INDEX uq_report_versions_one_standing ON public.report_versions USING btree (quest_id) WHERE standing;
+
+
+--
+-- Name: cap_records cap_records_quest_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cap_records
+    ADD CONSTRAINT cap_records_quest_id_fkey FOREIGN KEY (quest_id) REFERENCES public.quests(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cap_records cap_records_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cap_records
+    ADD CONSTRAINT cap_records_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -2964,4 +3015,5 @@ INSERT INTO schema_migrations (filename) VALUES
 ('20261124000007_add_quest_process_config_tables.rb'),
 ('20261124000008_add_engine_config_i04.rb'),
 ('20261124000009_add_tool_config_i05.rb'),
-('20261124000010_add_tripwire_views_i07.rb');
+('20261124000010_add_tripwire_views_i07.rb'),
+('20261124000011_add_cap_records.rb');
