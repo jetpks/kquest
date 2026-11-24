@@ -7,6 +7,17 @@ require_relative "../test_helper"
 # order — and the delete+insert idempotency (a second seed run leaves the
 # counts unchanged and heals any drift).
 class SeedContractTest < Minitest::Test
+  # Order-proof by construction: the suite's fixture cleanups sweep the
+  # config tables mid-run (the I12/I13/I16 sweeps), and this contract
+  # asserts what the SEEDS ship — so every test re-loads them (the
+  # delete+insert law is self-healing; the idempotency test below proves
+  # a re-run leaves counts unchanged). Caught live as an order-dependent
+  # gate-context failure on the integrated branch (ui cap rows swept to
+  # [] before this read) — the I15 flake's class, closed here.
+  def setup
+    load_seeds!
+  end
+
   def conn
     @conn ||= Kquest::App["db.gateway"].connection
   end
