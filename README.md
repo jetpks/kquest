@@ -7,11 +7,15 @@ source text and every derivation bottoms out at a typed terminal.
 
 **The graph is the asset; reports are views.**
 
-> **Status: design complete — no product code yet.** This repository holds
-> the complete design for kquest: eight design iterations covering 81
-> traced requirements in 110 decision records, with 19 executable gates that
-> prove the SQL, the state machines, and the checkers actually run. The
-> application will be built from here ([roadmap](#status-and-roadmap)).
+> **Status: alpha — early development.** The application is built: nine
+> implementation iterations landed on top of the ratified design below,
+> with a suite of 709 runs / 3,032 assertions green cold, design-fidelity
+> gates in CI, a scripted quest running end-to-end, and both wire gems
+> live on rubygems.
+> It has not yet run real quests against live providers at scale: expect
+> rough edges, missing operator conveniences, and evolving surfaces. The
+> design corpus under `design/` remains the law of the repository
+> ([status & roadmap](#status-and-roadmap)).
 
 ## The idea
 
@@ -157,9 +161,9 @@ Three further lessons shaped the design and are worth stating plainly:
 
 ## Architecture
 
-kquest will be a [Hanami](https://hanamirb.org) 3 application, minted
-from the [hanami-base](https://github.com/jetpks/hanami-base) template
-and specialised. Foundational decisions (`D1`–`D10`) fixed before any
+kquest is a [Hanami](https://hanamirb.org) 3 application, minted from
+the [hanami-base](https://github.com/jetpks/hanami-base) template and
+specialised. Foundational decisions (`D1`–`D10`) fixed before any
 iteration began:
 
 - **A native Ruby agent loop.** No shelling out to an external agent
@@ -224,6 +228,21 @@ flowchart LR
 
 ## Repository layout
 
+The application lives at the top of the tree; `design/` is the verbatim
+corpus it was built from — the migrations load its SQL unchanged, and CI
+proves the fidelity continuously (`script/design_fidelity_check.sh`).
+
+| Path | What |
+|---|---|
+| `app/`, `slices/` | Hanami app + six slices: corpus, retrieval, graph, quest, reports, watch |
+| `lib/kquest/` | `engine/` (the agent loop), `orchestrator/` (quest worker, phase runner), `tools/`, `pipeline/` (fetch→chunk→embed), `queries/`, `sse/`, `ui/` |
+| `config/db/` | migrations — the design DDL, verbatim — plus the config-table seeds |
+| `app/frontend/` | React + Inertia + Vite UI |
+| `script/` | fidelity harness, dedup recalibration + its run record, scripted quest run, live smokes |
+| `bin/` | `dev`, `serve`, `quest-worker.rb`, topology smokes |
+| `gems/` | vendored hanami-base support gems (inertia-hanami, vite-hanami, …) |
+| `design/` | the frozen design corpus — see below |
+
 Each iteration is a directory under `design/` containing `DESIGN.md` (the
 design), `DECISIONS.md` (numbered decision records with rationale and
 alternatives), and `artifacts/` (machine-checkable files and their
@@ -244,16 +263,35 @@ A good reading order is the one they were built in: the model first, then
 what crosses quests, then retrieval, the loop, the tools, the process,
 assurance, and finally the application that hosts it all.
 
-## Running the gates
+## Running it
 
-The design is executable. Nineteen checkers verify it — and each was
-proven to *bite* before it was trusted (mutate the input, watch it fail,
-restore it, watch it pass).
+**Prerequisites:** Ruby 4.0, Node 24, PostgreSQL with the `pgvector`
+extension, Redis. `.env` holds the local defaults (`DATABASE_URL`,
+`SESSION_SECRET`, `REDIS_URL`).
 
-**Prerequisites:** PostgreSQL with the `pgvector` extension available, and
-`psql` on your `PATH` (or at `/opt/homebrew/bin/psql`). Run from a git
-clone, not a tarball: seven of the coverage checkers verify prior
-iterations' files are unchanged against `HEAD`.
+```sh
+bundle install
+bundle exec hanami db prepare
+bin/dev        # Vite on :3036 + Falcon on http://localhost:3000
+```
+
+`bin/dev` installs frontend deps on first run. A quest worker is started
+separately (`bin/quest-worker.rb`) — one worker process per active quest.
+
+**The test suite** (709 runs / 3,032 assertions cold; 49 frontend tests):
+
+```sh
+bundle exec hanami db prepare   # prepares the test database
+bundle exec rake test
+npm test && npm run check       # vitest + tsc
+```
+
+**The design gates.** The design is executable. Nineteen checkers verify
+it — and each was proven to *bite* before it was trusted (mutate the
+input, watch it fail, restore it, watch it pass). You need `psql` on your
+`PATH` (or at `/opt/homebrew/bin/psql`), and a git clone, not a tarball:
+seven of the coverage checkers verify prior iterations' files are
+unchanged against `HEAD`.
 
 ```sh
 for s in design/*/artifacts/check-*.sh; do bash "$s" || echo "FAILED: $s"; done
@@ -262,7 +300,9 @@ for s in design/*/artifacts/check-*.sh; do bash "$s" || echo "FAILED: $s"; done
 The DDL gates create a scratch database, apply the schema and seed
 fixtures, run constraint probes (including negative probes that must be
 rejected), and drop the database. Nothing touches an existing database.
-All 19 pass on the current tree.
+CI runs the I01–I03 + I07 checkers as-is on every push, plus the migration
+fidelity harness proving the cataloged design law — 1,115 objects — loads
+byte-identical through the migrations.
 
 ## Reading the design docs
 
@@ -286,22 +326,36 @@ workspace rather than here. Paths of the form
 
 ## Status and roadmap
 
+**Alpha — early development.**
+
 The design phase ran 2026-11-22 to 2026-11-23: eight iterations, each
 written to a frozen specification, gated cold, reviewed by a fresh
 adversarial reviewer, integrated, and ratified. Every iteration ended
-ratified.
+ratified. The build phase ran 2026-11-24 and landed the full
+implementation arc of
+[I08 §12](design/I08-app-architecture/DESIGN.md#12-the-implementation-arc-sequencing-proposal-r-081)
+in nine gated iterations, every one judged `CONTINUE`: the wire gems
+(live on rubygems.org — [fast-llm](https://github.com/jetpks/fast-llm)),
+the minted app, schema + corpus pipeline, the engine, the tools with
+recalibrated dedup thresholds, the orchestrator, and the UI with the
+steering console — 526 files / ~55.9k insertions on top of the corpus.
+The suite grew 88 → 709 runs with zero reds ever integrated, and the
+design law stayed byte-frozen beneath it all.
 
-The implementation arc, as proposed in
-[I08 §12](design/I08-app-architecture/DESIGN.md#12-the-implementation-arc-sequencing-proposal-r-081):
+What alpha means concretely: the enforcement core — verbatim anchoring,
+typed terminals, transitions and stop rules as data — is built and
+tested, and a scripted quest runs end-to-end. But kquest has not yet run
+real campaigns against live providers at scale, grant administration is
+not yet surfaced in the UI, and deployment is unproven beyond the
+Containerfile.
 
-| Entry | Scope |
+Next:
+
+| | Scope |
 |---|---|
-| 0 | **Gems** — `fast-embeddings` and a small `fast-completions` patch, in the [fast-llm](https://github.com/jetpks/fast-llm) monorepo |
-| 1 | **Mint** the application from hanami-base |
-| 2 | **Schema + corpus** — the SQL in `design/` becomes migrations *verbatim*; the TSVs load as config tables; the blob uploader; the fetch→chunk→embed pipeline. The design checkers become CI regression gates. |
-| 3 | **Engine + tools** — the ten loop components and the 24 tools, each built against its fixture file. *Blocking:* recalibrate the dedup thresholds against the real embedding model. |
-| 4 | **Orchestrator** — the quest worker, phase runner, SSE events, assurance alerts, metrics, the model-qualification harness |
-| 5 | **UI** — the eight surfaces, steering console last |
+| — | First real-quest campaigns; tune budgets and frontier weights against live behavior |
+| — | Grant-admin UI (permissions are administered at the data layer today) |
+| — | Stream-gate alignment and the hardening notes queued in the build records |
 
 ## Provenance and prior art
 
