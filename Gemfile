@@ -37,6 +37,11 @@ gem "async-job-processor-redis", "0.3.1"
 # live-read defect (framed replies truncated at frame 1).
 gem "fast-embeddings", "0.1.1"
 
+# The chat-completions wire (I13: the agent loop's transport — streaming-only,
+# fiber-native). Exact pin 0.11.0: the DR-07 seed passthrough release
+# (`Client#stream … seed:` — the ProviderDesk decorator fills it per request).
+gem "fast-completions", "0.11.0"
+
 # File attachments
 gem "shrine", "3.10.2"
 

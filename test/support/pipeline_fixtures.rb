@@ -121,8 +121,16 @@ module PipelineFixtures
   end
 
   def cleanup(conn, user_id:)
-    # Reverse-FK order: vectors → jobs → usage → chunks → membership →
-    # sources → frontier → claims → sessions → phases → quests → users.
+    # Reverse-FK order: tool_calls → vectors → jobs → usage → chunks →
+    # membership → sources → frontier → claims → sessions → phases → quests →
+    # users. (I13: tool_calls joined the sweep — engine tests' audit rows FK
+    # onto sessions; leaked rows break the whole suite with FK violations on
+    # DELETE users.) The three engine CONFIG tables are global (no user_id
+    # column): the sweep resets them to empty — every consumer upserts its
+    # own rows, and the seeds' delete+insert law re-heals them at the next
+    # `hanami db prepare`.
+    conn[:tool_calls].where(user_id: user_id).delete
+    conn[:quest_lifecycle_events].where(user_id: user_id).delete
     conn[:emb_minilm_ab_384].where(user_id: user_id).delete
     conn[:emb_bge_m3_1024].where(user_id: user_id).delete
     conn[:embed_jobs].where(user_id: user_id).delete
@@ -136,6 +144,10 @@ module PipelineFixtures
     conn[:phases].where(user_id: user_id).delete
     conn[:quests].where(user_id: user_id).delete
     conn[:users].where(id: user_id).delete
+    # The engine config tables (global config data — see the note above).
+    conn[:llm_providers].delete
+    conn[:engine_config].delete
+    conn[:subagent_profiles].delete
     nil
   end
 end
