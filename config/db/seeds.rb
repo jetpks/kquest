@@ -21,9 +21,32 @@
 #     day-one `subagent_profiles` rows VERBATIM from I05 §8 (survey
 #     read-only, operator the full 24-tool surface). NO `llm_providers` row
 #     is seeded: provider rows are operator/session-minted config.
+#   - The I14 tool config (I05 DR-09's caps + D4/I03 G-REG claim-model ref +
+#     the CALIBRATED dedup constants): `tool_config` rows, one value carrier
+#     per row. The two dedup rows' values are the live recalibration run's
+#     chosen constants — provenance cites the committed run record
+#     (script/dedup_calibration/record.md); I05 DR-07 ruling A made the
+#     pre-calibration values (k=5 / floor 0.6) provisional.
+#   - The ONE existing-seed-line change (I05 DR-04 operator ruling A,
+#     amending I04 DR-09 for this single line): `engine.read_slice_cap_chars`
+#     ships mode=hard — the frozen `non-sliced-read` refusal is the
+#     hard-mode shape; every other line stays advisory.
+#   - NO `web_providers` row is seeded: no live web provider exists day one;
+#     the web tools refuse loudly naming the `tools.web_provider` config key
+#     until an operator mints a row.
 
 config_dir = File.expand_path(__dir__)
 seeds_dir  = File.join(config_dir, "seeds")
+
+require "json" # subagent_profiles.tools / tool_config are jsonb-adjacent inserts
+
+# The calibrated dedup constants (I05 DR-07 ruling A / I14 Part 6): the values
+# the live recalibration run chose — see the committed run record
+# script/dedup_calibration/record.md (the seeds' provenance cites it).
+# Live run 2026-11-24: floor 0.8387 (0 misclassifications over the 42-pair
+# dataset, families non-overlapping), k 2.
+CALIBRATED_K = 2
+CALIBRATED_FLOOR = 0.8387
 
 conn = Kquest::App["db.gateway"].connection
 
@@ -94,6 +117,8 @@ conn[:embedding_models].insert(
 )
 
 # --- engine_config (15 frozen design defaults, I04 §2.5/§7 + DR-09) ---------
+# {key => [value, provenance, mode]} — mode present ONLY for the read_slice
+# line (I05 DR-04 ruling A: the ONE hard line); every other line advisory.
 ENGINE_CONFIG_DEFAULTS = {
   "engine.transport_retry_cap"           => [3, "FM-05/06/15 (I04 §2.5 L1)"],
   "engine.rate_limit_retry_cap"          => [5, "FM-07 (I04 §2.5 L1/L3)"],
@@ -108,14 +133,43 @@ ENGINE_CONFIG_DEFAULTS = {
   "engine.slow_stall_bytes"              => [100, "FM-18 (SLOWSTALL alert, StreamWatch)"],
   "engine.slow_stall_window_s"           => [1200, "FM-18 (SLOWSTALL alert, StreamWatch)"],
   "engine.unattended_pause_s"            => [3600, "FM-18 (unattended window → pause, never kill)"],
-  "engine.read_slice_cap_chars"          => [8000, "FM-22 (ContextBudgeter accounting cap; the read-tool refusal is I05 R-052)"],
+  "engine.read_slice_cap_chars"          => [8000, "FM-22 (ContextBudgeter accounting cap; the read-tool refusal is I05 R-052; mode HARD per I05 DR-04 operator ruling A)", "hard"],
   "engine.embed_retry_cap"               => [3, "FM-23 (the shared embed retry classes)"]
 }.freeze
 
 conn.transaction do
-  ENGINE_CONFIG_DEFAULTS.each do |key, (value, provenance)|
+  ENGINE_CONFIG_DEFAULTS.each do |key, (value, provenance, mode)|
     conn[:engine_config].where(key: key).delete
-    conn[:engine_config].insert(key: key, value: value, mode: "advisory", provenance: provenance)
+    conn[:engine_config].insert(key: key, value: value, mode: mode || "advisory", provenance: provenance)
+  end
+end
+
+# --- tool_config (the I05 tool caps + the claim-model ref + the CALIBRATED
+# --- dedup constants; values from the committed recalibration record) -------
+# {key => [num_value, text_value, provenance]} — exactly one value carrier.
+TOOL_CONFIG_DEFAULTS = {
+  "tools.cap_search_rows"          => [20, nil, "I05 DR-09 (tart's measured caps: search 20 rows / 120-char snippets)"],
+  "tools.cap_search_snippet_chars" => [120, nil, "I05 DR-09 (tart's measured caps: search 20 rows / 120-char snippets)"],
+  "tools.cap_list_rows"            => [50, nil, "I05 DR-09 (list 50 rows; source_list 50 rows)"],
+  "tools.cap_neighbors"            => [50, nil, "I05 DR-09 (neighbors 50 aliases)"],
+  "tools.cap_paths_depth"          => [128, nil, "I05 DR-09 (paths depth 128, tart §PATHS_DEPTH_CAP)"],
+  "tools.cap_source_list_rows"     => [50, nil, "I05 DR-09 (source_list 50 rows)"],
+  "tools.cap_report_section_chars" => [20_000, nil, "I05 DR-09 / fixtures (section-too-large: bodies capped at 20000 chars)"],
+  "tools.claim_embedding_model"    => [nil, "92000000-0000-4000-8000-000000000001",
+                                       "D4 first model registration + I03 G-REG (the registry is the only model path)"],
+  "tools.dedup_near_top_k"         => [CALIBRATED_K, nil,
+                                       "I05 DR-07 ruling A + I03 DR-15 — CALIBRATED against the real registry model; " \
+                                       "run record: script/dedup_calibration/record.md"],
+  "tools.dedup_near_floor"         => [CALIBRATED_FLOOR, nil,
+                                       "I05 DR-07 ruling A + I03 DR-15 — CALIBRATED against the real registry model; " \
+                                       "run record: script/dedup_calibration/record.md"]
+}.freeze
+
+conn.transaction do
+  TOOL_CONFIG_DEFAULTS.each do |key, (num_value, text_value, provenance)|
+    conn[:tool_config].where(key: key).delete
+    conn[:tool_config].insert(key: key, num_value: num_value, text_value: text_value,
+                              provenance: provenance)
   end
 end
 
@@ -141,7 +195,6 @@ conn.transaction do
 end
 
 # --- the para-800 day-one chunk strategy (delete+insert by (name, version)) --
-require "json" # subagent_profiles.tools is jsonb
 
 conn[:chunk_strategies].where(name: "para-800", version: 1).delete
 conn[:chunk_strategies].insert(

@@ -148,6 +148,11 @@ module PipelineFixtures
     conn[:llm_providers].delete
     conn[:engine_config].delete
     conn[:subagent_profiles].delete
+    # I14's two lane-authored config tables (global config data, the same
+    # law): every consumer upserts its own rows; the seeds' delete+insert
+    # re-heals at the next `hanami db prepare`.
+    conn[:tool_config].delete
+    conn[:web_providers].delete
     nil
   end
 end
