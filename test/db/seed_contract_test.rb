@@ -63,6 +63,23 @@ class SeedContractTest < Minitest::Test
                  conn[:stop_rules].order(:rule_id).select_map(:rule_id)
   end
 
+  # The I16 UI listing caps (L15): one `ui.listing_cap.<surface>` row per
+  # capped read surface — config is the ONLY cap source
+  # (Kquest::Ui::CappedListing raises without it). The F1 dead rows
+  # (tools.web_search_cap / tools.report_section_chars_cap) are GONE.
+  def test_ui_listing_cap_rows_carry_provenance_and_the_f1_rows_are_gone
+    rows = conn[:tool_config].where(Sequel.like(:key, "ui.listing_cap.%"))
+    surfaces = rows.select_map(:key).map { |k| k.delete_prefix("ui.listing_cap.") }
+    assert_equal %w[alerts costs dashboard frontier graph quest reports].sort, surfaces.sort
+    rows.each do |row|
+      assert row[:num_value] && row[:num_value].positive?, "#{row[:key]} carries a numeric cap"
+      assert_match "I16 Part 0.2", row[:provenance], "the cap row's provenance"
+    end
+    assert_empty conn[:tool_config].where(key: %w[tools.web_search_cap
+                                                 tools.report_section_chars_cap]),
+                 "F1 (I15 judgment): the two dead rows are dropped"
+  end
+
   # Idempotency/self-healing: the delete+insert seed re-run leaves the
   # counts unchanged (and would heal a drifted value — the seed-contract
   # gate's mutation bites at the next prepare).

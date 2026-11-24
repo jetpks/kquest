@@ -219,14 +219,34 @@ PHASE_TASK_TEXTS = {
     [20, nil, "I07 DR-02 ruling A (fixed n = 20, seeded, stratified per " \
               "verification phase)"],
   "assurance.poll_interval_s" =>
-    [30, nil, "I08 §3.4 default (the assurance_alert poller cadence)"],
-  "tools.web_search_cap" =>
-    [5, nil, "I05 §7.1 (the web_search default max_results; the I15 scripted " \
-             "quest's fixture wire)"],
-  "tools.report_section_chars_cap" =>
-    [20_000, nil, "I06 §9.4 write-in-sections (the I15 scripted quest's " \
-                  "synthesis sectioning; mirrors tools.cap_report_section_chars)"]
+    [30, nil, "I08 §3.4 default (the assurance_alert poller cadence)"]
 }.freeze
+
+# --- the I16 UI listing caps (L15: caps on EVERY listing surface) ------------
+# One `ui.listing_cap.<surface>` row per capped read surface (I16 Part 0.2;
+# Kquest::UI::CappedListing reads these — config is the only cap source).
+# The surface NAMES are frozen in the I16 spec; the VALUES are lane-authored
+# constants (provenance carries the rationale). F1 fix (I15 judgment, "next
+# seeds touch"): the two dead rows named in the I15 judgment (no consumer,
+# false provenance — config_rows_test.rb asserts neither) are dropped from
+# the PHASE_TASK_TEXTS hash above.
+UI_LISTING_CAPS = {
+  "ui.listing_cap.dashboard" => [50, "I16 Part 0.2 (the dashboard's quest cards; one screen's worth)"],
+  "ui.listing_cap.quest"     => [50, "I16 Part 0.2 (the quest view's ledger/sessions/phases lists)"],
+  "ui.listing_cap.frontier"  => [50, "I16 Part 0.2 (the frontier inspector's entry table; mass order)"],
+  "ui.listing_cap.graph"     => [50, "I16 Part 0.2 (the graph browser's node/evidence lists)"],
+  "ui.listing_cap.reports"   => [50, "I16 Part 0.2 (the report view's version chain)"],
+  "ui.listing_cap.costs"     => [100, "I16 Part 0.2 (the costs ledger rows; flat usage rows run long)"],
+  "ui.listing_cap.alerts"    => [20, "I16 Part 0.2 (per-predicate fire sets; a longer set is the overhang story)"]
+}.freeze
+
+conn.transaction do
+  UI_LISTING_CAPS.each do |key, (num_value, provenance)|
+    conn[:tool_config].where(key: key).delete
+    conn[:tool_config].insert(key: key, num_value: num_value, text_value: nil,
+                              provenance: provenance)
+  end
+end
 
 conn.transaction do
   PHASE_TASK_TEXTS.each do |key, (num_value, text_value, provenance)|
