@@ -77,11 +77,15 @@ jobs:
           grep -E '^\d+ runs,' /tmp/rake-test.log >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
-  # The prior design checkers as regression law (I12 AC4), scoped EXACTLY to
-  # I01–I03 + the migration fidelity harness: the I06 checkers grep absolute
-  # PoC paths (local frozen law — never CI), and the live-key smoke is never
-  # CI. Each checker is self-contained (scratch dbs, drop-if-exists) and runs
-  # AS-IS; its bare `psql -d postgres` honors the PG* env below.
+  # The prior design checkers as regression law (I12 AC4; I15 additive),
+  # scoped EXACTLY to I01–I03 + I07 + the migration fidelity harness: the I06
+  # checkers grep absolute PoC paths (local frozen law — never CI), and the
+  # live-key smoke is never CI. Each checker is self-contained (scratch dbs,
+  # drop-if-exists) and runs AS-IS; its bare `psql -d postgres` honors the
+  # PG* env below. The I07 check-tripwires.sh line is I15's additive scope
+  # extension: its consumer (the assurance_alert poller) landed at I15, and
+  # unlike the I04/I05/I06 checkers it carries no absolute PoC paths — the
+  # recorded exclusion reason does not apply to it.
   design-regression:
     runs-on: ubuntu-latest
     services:
@@ -119,7 +123,7 @@ jobs:
           sudo apt-get install -y -qq postgresql-client-18
           echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
       - run: bundle install
-      - name: Design checkers (I01–I03, as-is)
+      - name: Design checkers (I01–I03, I07 — as-is)
         run: |
           bash design/I01-core-model/artifacts/check-ddl.sh
           bash design/I01-core-model/artifacts/check-constraints.sh
@@ -130,6 +134,7 @@ jobs:
           bash design/I03-retrieval/artifacts/check-ddl.sh
           bash design/I03-retrieval/artifacts/check-constraints.sh
           bash design/I03-retrieval/artifacts/check-coverage.sh
+          bash design/I07-assurance/artifacts/check-tripwires.sh
       - name: Migration fidelity harness
         run: |
           bash script/design_fidelity_check.sh

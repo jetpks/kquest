@@ -27,6 +27,12 @@
 #     chosen constants — provenance cites the committed run record
 #     (script/dedup_calibration/record.md); I05 DR-07 ruling A made the
 #     pre-calibration values (k=5 / floor 0.6) provisional.
+#   - The I15 orchestrator rows (arc ENTRY 4, Part 12): the five phase-kind
+#     task texts (the phase prompt's first part — transcribed from the I06
+#     §9 Task lines, provenance citing the §), `verification.spot_check_n`
+#     (I07 DR-02 ruling A) and `assurance.poll_interval_s` (I08 §3.4
+#     default). No engine_config change; no seeded provider rows (tests +
+#     scripts upsert their own — the standing law).
 #   - The ONE existing-seed-line change (I05 DR-04 operator ruling A,
 #     amending I04 DR-09 for this single line): `engine.read_slice_cap_chars`
 #     ships mode=hard — the frozen `non-sliced-read` refusal is the
@@ -167,6 +173,63 @@ TOOL_CONFIG_DEFAULTS = {
 
 conn.transaction do
   TOOL_CONFIG_DEFAULTS.each do |key, (num_value, text_value, provenance)|
+    conn[:tool_config].where(key: key).delete
+    conn[:tool_config].insert(key: key, num_value: num_value, text_value: text_value,
+                              provenance: provenance)
+  end
+end
+
+# --- the I15 orchestrator rows (additive, Part 12) ---------------------------
+# The phase-kind task texts (I06 §9's Task lines, verbatim per § — the
+# phase prompt's FIRST part; I06 §10.1) + the two assurance/verification
+# constants (I07 DR-02 ruling A / I08 §3.4 default).
+PHASE_TASK_TEXTS = {
+  "phase_task_text.decompose" =>
+    [nil,
+     "Take one or more corpus sources with no evidence nodes yet: extract " \
+     "verbatim-anchored evidence and claim nodes and seed the frontier.",
+     "I06 §9.1 (the decompose Task line; mode-conditioned per I06 §10.1)"],
+  "phase_task_text.frontier-build" =>
+    [nil,
+     "Enumerate the topic's clusters against the listing surface; create " \
+     "evidence-anchored queued claims + frontier entries with needs naming " \
+     "primaries (authors/year/venue) until the MASS floor is met.",
+     "I06 §9.2 (the frontier-build Task line; mass-based, not count-based)"],
+  "phase_task_text.descent" =>
+    [nil,
+     "Take the top open frontier item: resolve its descent need (from the " \
+     "saved corpus when the target is already saved, else search and fetch " \
+     "it), decompose the target, wire derives_from, type terminals, update " \
+     "the frontier.",
+     "I06 §9.3 (the descent Task line)"],
+  "phase_task_text.synthesis" =>
+    [nil,
+     "Write the report FROM THE GRAPH (question-shaped chapters — the facet " \
+     "law, mode-conditioned; every material claim cited with local ordinals; " \
+     "imports explicitly marked, never silent, R-026/R-027).",
+     "I06 §9.4 (the synthesis Task line; context is CONSTRUCTED, never " \
+     "inherited — I02 DR-11)"],
+  "phase_task_text.verification" =>
+    [nil,
+     "Path-checking (sample derivation paths; every assertion's path reaches " \
+     "a typed terminal or an explicit uncertainty flag) + spot checks (spans " \
+     "byte-exact vs blobs; readings faithful to their spans).",
+     "I06 §9.5 (the verification Task line; I07 DR-01 ruling A cadence)"],
+  "verification.spot_check_n" =>
+    [20, nil, "I07 DR-02 ruling A (fixed n = 20, seeded, stratified per " \
+              "verification phase)"],
+  "assurance.poll_interval_s" =>
+    [30, nil, "I08 §3.4 default (the assurance_alert poller cadence)"],
+  "tools.web_search_cap" =>
+    [5, nil, "I05 §7.1 (the web_search default max_results; the I15 scripted " \
+             "quest's fixture wire)"],
+  "tools.report_section_chars_cap" =>
+    [20_000, nil, "I06 §9.4 write-in-sections (the I15 scripted quest's " \
+                  "synthesis sectioning; mirrors tools.cap_report_section_chars)"]
+}.freeze
+
+conn.transaction do
+  PHASE_TASK_TEXTS.each do |key, (num_value, text_value, provenance)|
     conn[:tool_config].where(key: key).delete
     conn[:tool_config].insert(key: key, num_value: num_value, text_value: text_value,
                               provenance: provenance)

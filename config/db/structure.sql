@@ -843,127 +843,71 @@ CREATE TABLE public.usage_events (
 
 
 --
--- Name: users; Type: TABLE; Schema: public; Owner: -
+-- Name: tw_cache_wall; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE TABLE public.users (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    handle text NOT NULL,
-    display_name text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    github_uid text DEFAULT ''::text NOT NULL,
-    username text DEFAULT ''::text NOT NULL,
-    name text,
-    email text,
-    avatar_url text,
-    updated_at timestamp with time zone,
-    CONSTRAINT ck_users_handle CHECK ((handle ~ '^[a-z0-9][a-z0-9_-]{1,31}$'::text))
-);
+CREATE VIEW public.tw_cache_wall AS
+ SELECT session_id,
+    user_id,
+    quest_id,
+    count(*) AS uncacheable_high_context_turns,
+    max(input_tokens) AS max_input_tokens
+   FROM public.usage_events ue
+  WHERE ((kind = 'llm'::text) AND (input_tokens >= 205000) AND (cache_read_tokens = 0))
+  GROUP BY session_id, user_id, quest_id
+ HAVING (count(*) >= 3);
 
 
 --
--- Name: v_canonical_claims; Type: VIEW; Schema: public; Owner: -
+-- Name: tw_churn; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE VIEW public.v_canonical_claims AS
- SELECT user_id,
-    canonical_text,
-    terminal_type,
-    array_agg(id ORDER BY quest_id, id) AS member_claim_ids,
-    count(DISTINCT quest_id) AS quest_count,
-    min(created_at) AS first_seen,
-    max(created_at) AS latest_seen,
-    (count(*) FILTER (WHERE (terminal_type IS NOT NULL)) OVER (PARTITION BY user_id, canonical_text) > 1) AS type_divergent
-   FROM public.claims c
-  GROUP BY user_id, canonical_text, terminal_type;
-
-
---
--- Name: v_claim_closure; Type: VIEW; Schema: public; Owner: -
---
-
-CREATE VIEW public.v_claim_closure AS
- SELECT quest_id,
-    id AS claim_id,
-    quest_seq,
-    canonical_text,
-    (terminal_type IS NOT NULL) AS has_terminal,
-    terminal_type,
-    ( SELECT count(*) AS count
-           FROM public.claim_derivations d
-          WHERE (d.claim_id = c.id)) AS derives_from_count,
-    ( SELECT count(*) AS count
-           FROM public.evidence_edges ee
-          WHERE (ee.claim_id = c.id)) AS evidence_count,
-    ( SELECT count(*) AS count
-           FROM public.frontier_entries f
-          WHERE ((f.claim_id = c.id) AND (f.state = 'open'::text))) AS open_frontier_count,
-    ((terminal_type IS NULL) AND (NOT (EXISTS ( SELECT 1
-           FROM public.claim_derivations d
-          WHERE (d.claim_id = c.id)))) AND (NOT (EXISTS ( SELECT 1
-           FROM public.frontier_entries f
-          WHERE ((f.claim_id = c.id) AND (f.state = 'open'::text)))))) AS bare
-   FROM public.claims c;
+CREATE VIEW public.tw_churn AS
+ WITH runs AS (
+         SELECT tc.session_id,
+            tc.seq,
+            tc.ok,
+            (row_number() OVER (PARTITION BY tc.session_id ORDER BY tc.seq) - row_number() OVER (PARTITION BY tc.session_id, tc.ok ORDER BY tc.seq)) AS grp
+           FROM public.tool_calls tc
+        )
+ SELECT session_id,
+    count(*) AS consecutive_failures,
+    min(seq) AS first_seq,
+    max(seq) AS last_seq
+   FROM runs r
+  WHERE (ok = false)
+  GROUP BY session_id, grp
+ HAVING (count(*) >= 10);
 
 
 --
--- Name: v_unmined_sources; Type: VIEW; Schema: public; Owner: -
+-- Name: tw_context_blowout; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE VIEW public.v_unmined_sources AS
- SELECT qs.quest_id,
-    qs.source_id,
-    s.urn,
-    s.title
-   FROM (public.quest_sources qs
-     JOIN public.sources s ON (((s.id = qs.source_id) AND (s.user_id = qs.user_id))))
-  WHERE ((s.role = 'citable'::text) AND (NOT (EXISTS ( SELECT 1
-           FROM public.evidence e
-          WHERE ((e.source_id = qs.source_id) AND (e.quest_id = qs.quest_id))))));
-
-
---
--- Name: v_decompose_remaining; Type: VIEW; Schema: public; Owner: -
---
-
-CREATE VIEW public.v_decompose_remaining AS
- SELECT quest_id,
-    count(*) AS unmined_citable
-   FROM public.v_unmined_sources
-  GROUP BY quest_id;
+CREATE VIEW public.tw_context_blowout AS
+ SELECT session_id,
+    user_id,
+    quest_id,
+    count(*) AS non_sliced_read_refusals
+   FROM public.tool_calls tc
+  WHERE ((ok = false) AND (error_class = 'non_sliced_read'::text))
+  GROUP BY session_id, user_id, quest_id
+ HAVING (count(*) >= 3);
 
 
 --
--- Name: v_frontier_open; Type: VIEW; Schema: public; Owner: -
+-- Name: tw_empty_storm; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE VIEW public.v_frontier_open AS
- SELECT f.quest_id,
-    f.id AS entry_id,
-    f.claim_id,
-    c.quest_seq AS claim_seq,
-    f.need,
-    f.uncertainty,
-    f.relevance,
-    (f.uncertainty * f.relevance) AS mass,
-    f.spawned_by_phase_id,
-    f.opened_at
-   FROM (public.frontier_entries f
-     JOIN public.claims c ON (((c.id = f.claim_id) AND (c.quest_id = f.quest_id))))
-  WHERE (f.state = 'open'::text)
-  ORDER BY f.quest_id, (f.uncertainty * f.relevance) DESC, c.quest_seq, f.id;
-
-
---
--- Name: v_frontier_mass; Type: VIEW; Schema: public; Owner: -
---
-
-CREATE VIEW public.v_frontier_mass AS
- SELECT quest_id,
-    count(*) AS open_entries,
-    COALESCE(sum(mass), (0)::bigint) AS mass
-   FROM public.v_frontier_open
-  GROUP BY quest_id;
+CREATE VIEW public.tw_empty_storm AS
+ SELECT phase_id,
+    quest_id,
+    user_id,
+    count(*) AS empty_completions
+   FROM public.usage_events ue
+  WHERE ((kind = 'llm'::text) AND (input_tokens > 0) AND (output_tokens = 0))
+  GROUP BY phase_id, quest_id, user_id
+ HAVING (count(*) >= 3);
 
 
 --
@@ -1066,6 +1010,334 @@ CREATE VIEW public.v_quest_graph_fingerprint AS
            FROM public.frontier_entries f
           WHERE (f.quest_id = q.id)), ''::text)), 'UTF8'::name)), 'hex'::text) AS graph_fingerprint
    FROM public.quests q;
+
+
+--
+-- Name: tw_fingerprint_drift; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.tw_fingerprint_drift AS
+ SELECT rv.quest_id,
+    rv.user_id,
+    'report_pin'::text AS pin_kind,
+    rv.version_seq,
+    rv.id AS report_version_id,
+    rv.quest_fingerprint AS pinned_fingerprint,
+    fp.graph_fingerprint AS live_fingerprint
+   FROM (public.report_versions rv
+     JOIN public.v_quest_graph_fingerprint fp ON ((fp.quest_id = rv.quest_id)))
+  WHERE ((rv.quest_fingerprint)::text <> fp.graph_fingerprint)
+UNION ALL
+ SELECT e.quest_id,
+    e.user_id,
+    'archive_pin'::text AS pin_kind,
+    NULL::integer AS version_seq,
+    NULL::uuid AS report_version_id,
+    e.graph_fingerprint AS pinned_fingerprint,
+    fp.graph_fingerprint AS live_fingerprint
+   FROM (public.quest_lifecycle_events e
+     JOIN public.v_quest_graph_fingerprint fp ON ((fp.quest_id = e.quest_id)))
+  WHERE ((e.to_state = 'archived'::text) AND ((e.graph_fingerprint)::text <> fp.graph_fingerprint));
+
+
+--
+-- Name: v_canonical_claims; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.v_canonical_claims AS
+ SELECT user_id,
+    canonical_text,
+    terminal_type,
+    array_agg(id ORDER BY quest_id, id) AS member_claim_ids,
+    count(DISTINCT quest_id) AS quest_count,
+    min(created_at) AS first_seen,
+    max(created_at) AS latest_seen,
+    (count(*) FILTER (WHERE (terminal_type IS NOT NULL)) OVER (PARTITION BY user_id, canonical_text) > 1) AS type_divergent
+   FROM public.claims c
+  GROUP BY user_id, canonical_text, terminal_type;
+
+
+--
+-- Name: tw_hub_divergence; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.tw_hub_divergence AS
+ SELECT user_id,
+    canonical_text,
+    terminal_type,
+    member_claim_ids,
+    quest_count,
+    first_seen,
+    latest_seen
+   FROM public.v_canonical_claims v
+  WHERE type_divergent;
+
+
+--
+-- Name: tw_missing_spend; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.tw_missing_spend AS
+ SELECT s.id AS session_id,
+    s.user_id,
+    s.quest_id,
+    s.phase_id,
+    count(tc.id) AS tool_calls
+   FROM (public.sessions s
+     JOIN public.tool_calls tc ON ((tc.session_id = s.id)))
+  WHERE ((s.ended_at IS NOT NULL) AND (NOT (EXISTS ( SELECT 1
+           FROM public.usage_events ue
+          WHERE ((ue.session_id = s.id) AND (ue.kind = 'llm'::text))))))
+  GROUP BY s.id, s.user_id, s.quest_id, s.phase_id;
+
+
+--
+-- Name: tw_repetition; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.tw_repetition AS
+ WITH marked AS (
+         SELECT tc.session_id,
+            tc.seq,
+            tc.tool,
+            tc.op,
+            ((((tc.tool || '|'::text) || COALESCE(tc.op, ''::text)) || '|'::text) || (tc.args)::text) AS body,
+            (((((tc.tool || '|'::text) || COALESCE(tc.op, ''::text)) || '|'::text) || (tc.args)::text) IS DISTINCT FROM lag(((((tc.tool || '|'::text) || COALESCE(tc.op, ''::text)) || '|'::text) || (tc.args)::text)) OVER (PARTITION BY tc.session_id ORDER BY tc.seq)) AS run_start
+           FROM public.tool_calls tc
+        ), runs AS (
+         SELECT marked.session_id,
+            marked.seq,
+            marked.tool,
+            marked.op,
+            marked.body,
+            sum((marked.run_start)::integer) OVER (PARTITION BY marked.session_id ORDER BY marked.seq) AS grp
+           FROM marked
+        )
+ SELECT session_id,
+    tool,
+    op,
+    count(*) AS consecutive_identical,
+    min(seq) AS first_seq,
+    max(seq) AS last_seq
+   FROM runs
+  GROUP BY session_id, grp, tool, op
+ HAVING (count(*) >= 3);
+
+
+--
+-- Name: tw_rotation; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.tw_rotation AS
+ SELECT id AS phase_id,
+    user_id,
+    quest_id,
+    kind,
+    round_no,
+    attempt_no,
+    state
+   FROM public.phases p
+  WHERE ((attempt_no > 3) AND (state = ANY (ARRAY['pending'::text, 'running'::text, 'failed'::text])));
+
+
+--
+-- Name: tw_shape_storm; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.tw_shape_storm AS
+ SELECT session_id,
+    user_id,
+    quest_id,
+    count(*) AS shape_errors
+   FROM public.tool_calls tc
+  WHERE (error_class = ANY (ARRAY['unknown_tool'::text, 'tool_arguments_failure'::text]))
+  GROUP BY session_id, user_id, quest_id
+ HAVING (count(*) >= 3);
+
+
+--
+-- Name: tw_size_ceiling; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.tw_size_ceiling AS
+ SELECT s.id AS session_id,
+    s.user_id,
+    s.quest_id,
+    s.phase_id,
+    s.model,
+    b.audit_bytes,
+        CASE
+            WHEN (b.audit_bytes >= 496000) THEN 'hard'::text
+            ELSE 'warn'::text
+        END AS band
+   FROM (public.sessions s
+     JOIN LATERAL ( SELECT COALESCE(sum((octet_length((tc.args)::text) + octet_length((tc.result)::text))), (0)::bigint) AS audit_bytes
+           FROM public.tool_calls tc
+          WHERE (tc.session_id = s.id)) b ON (true))
+  WHERE (b.audit_bytes >= 450000);
+
+
+--
+-- Name: tw_slowstall; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.tw_slowstall AS
+ SELECT s.id AS session_id,
+    s.user_id,
+    s.quest_id,
+    s.phase_id,
+    s.model,
+    s.started_at,
+    w.window_events,
+    w.window_bytes
+   FROM (public.sessions s
+     JOIN LATERAL ( SELECT count(*) AS window_events,
+            COALESCE(sum((octet_length((tc.args)::text) + octet_length((tc.result)::text))), (0)::bigint) AS window_bytes
+           FROM public.tool_calls tc
+          WHERE ((tc.session_id = s.id) AND (tc.created_at > (now() - '00:20:00'::interval)))) w ON (true))
+  WHERE ((s.ended_at IS NULL) AND (w.window_events >= 1) AND (w.window_bytes < 100));
+
+
+--
+-- Name: tw_wedge; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.tw_wedge AS
+ WITH lastev AS (
+         SELECT s_1.id AS session_id,
+            GREATEST(s_1.started_at, COALESCE(( SELECT max(tc.created_at) AS max
+                   FROM public.tool_calls tc
+                  WHERE (tc.session_id = s_1.id)), s_1.started_at), COALESCE(( SELECT max(ue.created_at) AS max
+                   FROM public.usage_events ue
+                  WHERE (ue.session_id = s_1.id)), s_1.started_at)) AS last_event_at
+           FROM public.sessions s_1
+        )
+ SELECT s.id AS session_id,
+    s.user_id,
+    s.quest_id,
+    s.phase_id,
+    s.model,
+    s.started_at,
+    l.last_event_at,
+    (EXTRACT(epoch FROM (now() - l.last_event_at)))::bigint AS last_event_age_s,
+    t.tool AS last_tool,
+    t.ok AS last_tool_ok
+   FROM ((public.sessions s
+     JOIN lastev l ON ((l.session_id = s.id)))
+     LEFT JOIN LATERAL ( SELECT tc.tool,
+            tc.ok
+           FROM public.tool_calls tc
+          WHERE (tc.session_id = s.id)
+          ORDER BY tc.created_at DESC, tc.seq DESC
+         LIMIT 1) t ON (true))
+  WHERE ((s.ended_at IS NULL) AND (l.last_event_at < (now() - '00:20:00'::interval)));
+
+
+--
+-- Name: users; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.users (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    handle text NOT NULL,
+    display_name text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    github_uid text DEFAULT ''::text NOT NULL,
+    username text DEFAULT ''::text NOT NULL,
+    name text,
+    email text,
+    avatar_url text,
+    updated_at timestamp with time zone,
+    CONSTRAINT ck_users_handle CHECK ((handle ~ '^[a-z0-9][a-z0-9_-]{1,31}$'::text))
+);
+
+
+--
+-- Name: v_claim_closure; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.v_claim_closure AS
+ SELECT quest_id,
+    id AS claim_id,
+    quest_seq,
+    canonical_text,
+    (terminal_type IS NOT NULL) AS has_terminal,
+    terminal_type,
+    ( SELECT count(*) AS count
+           FROM public.claim_derivations d
+          WHERE (d.claim_id = c.id)) AS derives_from_count,
+    ( SELECT count(*) AS count
+           FROM public.evidence_edges ee
+          WHERE (ee.claim_id = c.id)) AS evidence_count,
+    ( SELECT count(*) AS count
+           FROM public.frontier_entries f
+          WHERE ((f.claim_id = c.id) AND (f.state = 'open'::text))) AS open_frontier_count,
+    ((terminal_type IS NULL) AND (NOT (EXISTS ( SELECT 1
+           FROM public.claim_derivations d
+          WHERE (d.claim_id = c.id)))) AND (NOT (EXISTS ( SELECT 1
+           FROM public.frontier_entries f
+          WHERE ((f.claim_id = c.id) AND (f.state = 'open'::text)))))) AS bare
+   FROM public.claims c;
+
+
+--
+-- Name: v_unmined_sources; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.v_unmined_sources AS
+ SELECT qs.quest_id,
+    qs.source_id,
+    s.urn,
+    s.title
+   FROM (public.quest_sources qs
+     JOIN public.sources s ON (((s.id = qs.source_id) AND (s.user_id = qs.user_id))))
+  WHERE ((s.role = 'citable'::text) AND (NOT (EXISTS ( SELECT 1
+           FROM public.evidence e
+          WHERE ((e.source_id = qs.source_id) AND (e.quest_id = qs.quest_id))))));
+
+
+--
+-- Name: v_decompose_remaining; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.v_decompose_remaining AS
+ SELECT quest_id,
+    count(*) AS unmined_citable
+   FROM public.v_unmined_sources
+  GROUP BY quest_id;
+
+
+--
+-- Name: v_frontier_open; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.v_frontier_open AS
+ SELECT f.quest_id,
+    f.id AS entry_id,
+    f.claim_id,
+    c.quest_seq AS claim_seq,
+    f.need,
+    f.uncertainty,
+    f.relevance,
+    (f.uncertainty * f.relevance) AS mass,
+    f.spawned_by_phase_id,
+    f.opened_at
+   FROM (public.frontier_entries f
+     JOIN public.claims c ON (((c.id = f.claim_id) AND (c.quest_id = f.quest_id))))
+  WHERE (f.state = 'open'::text)
+  ORDER BY f.quest_id, (f.uncertainty * f.relevance) DESC, c.quest_seq, f.id;
+
+
+--
+-- Name: v_frontier_mass; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.v_frontier_mass AS
+ SELECT quest_id,
+    count(*) AS open_entries,
+    COALESCE(sum(mass), (0)::bigint) AS mass
+   FROM public.v_frontier_open
+  GROUP BY quest_id;
 
 
 --
@@ -2691,4 +2963,5 @@ INSERT INTO schema_migrations (filename) VALUES
 ('20261124000006_add_users_auth_columns.rb'),
 ('20261124000007_add_quest_process_config_tables.rb'),
 ('20261124000008_add_engine_config_i04.rb'),
-('20261124000009_add_tool_config_i05.rb');
+('20261124000009_add_tool_config_i05.rb'),
+('20261124000010_add_tripwire_views_i07.rb');

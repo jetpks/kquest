@@ -16,23 +16,42 @@ module Kquest
     # turn never appended, committed mutations survive), the REAPER (FM-21 —
     # orphaned `ended_at IS NULL` rows whose owner is gone get `ended_at`
     # stamped), and the ceiling menu record (FM-02/DR-06). Worker liveness
-    # day one is the in-process session registry — the worker-registry
-    # hosting is ENTRY 4's seam, recorded not hidden. Orchestrator-vs-
-    # operator launch modes write `sessions.driver` accordingly (L13 —
-    # identical tools/constraints/audit).
+    # is a PORT (ENTRY 4's additive seam): the in-process session registry
+    # remains the DEFAULT (every I13 behavior and test unchanged); a
+    # registry-backed liveness source — the ENTRY 4 redis worker registry —
+    # is constructor-injected (`liveness:`) and answers `session_live?` for
+    # the gate, the reaper, and the banking paths. Orchestrator-vs-operator
+    # launch modes write `sessions.driver` accordingly (L13 — identical
+    # tools/constraints/audit).
     class SessionSupervisor
+      # The port's default adapter: the IN-PROCESS registry of live session
+      # ids (shared across supervisor instances — one process, one registry),
+      # speaking the port protocol (`claim_session!` / `release_session!` /
+      # `session_live?`). The redis worker registry answers the same protocol
+      # (Kquest::Orchestrator::WorkerRegistry).
+      class InProcessLiveness
+        def initialize(set = SessionSupervisor.registry) = @set = set
+
+        def claim_session!(session_id) = (@set << session_id)
+
+        def release_session!(session_id) = (@set.delete(session_id))
+
+        def session_live?(session_id) = @set.include?(session_id)
+      end
+
       # Day-one liveness: the IN-PROCESS registry of live session ids — shared
       # across supervisor instances (one process, one registry); the ENTRY 4
-      # worker-registry hosting is the successor seam.
+      # worker-registry hosting is its successor via the `liveness:` port.
       def self.registry = @registry ||= Set.new
 
       def self.registry_clear = @registry = nil
 
       def live_sessions = self.class.registry
 
-      def initialize(conn:)
+      def initialize(conn:, liveness: nil)
         @conn = conn
         @pause_requested = Set.new
+        @liveness = liveness || InProcessLiveness.new
       end
 
       # ── the launch gate (FM-16 / E-1W) ─────────────────────────────────
@@ -56,18 +75,18 @@ module Kquest
             user_id: user_id, quest_id: quest_id, phase_id: phase_id,
             mode: mode, driver: driver, model: model
           )
-          self.class.registry << session_id
+          @liveness.claim_session!(session_id)
         end
         session_id
       end
 
       # A live holder: an open session row whose owning worker is alive (the
-      # in-process registry day one; the ENTRY 4 worker registry is the host
-      # successor). A dead holder is not a violation — the reaper owns that
-      # transition.
+      # liveness PORT answers — the in-process registry by default, the redis
+      # worker registry when injected). A dead holder is not a violation —
+      # the reaper owns that transition.
       def live_holder(quest_id)
         @conn[:sessions].where(quest_id: quest_id, ended_at: nil).for_update.each do |row|
-          return row if self.class.registry.include?(row[:id])
+          return row if @liveness.session_live?(row[:id])
         end
         nil
       end
@@ -151,7 +170,7 @@ module Kquest
         scope = @conn[:sessions].where(ended_at: nil)
         scope = scope.where(quest_id: quest_id) if quest_id
         scope.each do |row|
-          next if self.class.registry.include?(row[:id])
+          next if @liveness.session_live?(row[:id])
 
           @conn[:sessions].where(id: row[:id]).update(ended_at: Time.now)
           reaped << row[:id]
@@ -171,7 +190,7 @@ module Kquest
                       .update(result: Sequel.lit("coalesce(result, '{}'::jsonb) || ?::jsonb",
                                                  JSON.generate(ceiling: menu_record)))
         @conn[:sessions].where(id: session_id, ended_at: nil).update(ended_at: now)
-        self.class.registry.delete(session_id)
+        @liveness.release_session!(session_id)
         menu_record
       end
 
@@ -179,7 +198,7 @@ module Kquest
       # liveness registry released.
       def bank_session!(session_id:)
         @conn[:sessions].where(id: session_id, ended_at: nil).update(ended_at: Time.now)
-        self.class.registry.delete(session_id)
+        @liveness.release_session!(session_id)
         nil
       end
     end
