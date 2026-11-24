@@ -15,5 +15,10 @@ module Kquest
 
     # The shell's root landing page
     root to: "home.index"
+
+    # The watch slice (I15): the quest-watch stream + the /metrics exposition
+    # — the slice's own routes (slices/watch/routes.rb) carry the frozen URL
+    # contract for ENTRY 5 (`GET /quests/:quest_id/stream`, `GET /metrics`).
+    slice :watch, at: "/"
   end
 end
