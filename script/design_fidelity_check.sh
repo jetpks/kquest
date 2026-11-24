@@ -51,6 +51,16 @@ fail() { echo "FIDELITY_FAIL: $1" >&2; exit 1; }
 
 [ -f "$CATALOG" ] || fail "missing catalog query: $CATALOG"
 
+# CI portability (I12 Part 5): the sha256 tool resolves loudly — `sha256sum`
+# (ubuntu) or `shasum -a 256` (macOS); no fallback, no silent drift.
+if command -v sha256sum >/dev/null 2>&1; then
+  SHA256_TOOL="sha256sum"
+elif command -v shasum >/dev/null 2>&1; then
+  SHA256_TOOL="shasum -a 256"
+else
+  fail "no sha256 tool found (need sha256sum or shasum)"
+fi
+
 # ---- side A: design DDL applied verbatim (psql, no seeds) -------------------
 "$PSQL" -q -d postgres -c "DROP DATABASE IF EXISTS $DB_A" >/dev/null || fail "drop $DB_A"
 "$PSQL" -q -d postgres -c "CREATE DATABASE $DB_A" >/dev/null || fail "create $DB_A"
@@ -72,7 +82,7 @@ done
 "$PSQL" -q -d postgres -c "DROP DATABASE IF EXISTS $DB_B" >/dev/null || fail "drop $DB_B"
 "$PSQL" -q -d postgres -c "CREATE DATABASE $DB_B" >/dev/null || fail "create $DB_B"
 (cd "$APP_ROOT" && \
-  HANAMI_ENV=test DATABASE_URL="postgres:///$DB_B" bundle exec hanami db migrate --no-dump \
+  HANAMI_ENV=test DATABASE_URL="${DB_URL_BASE:-postgres:///}$DB_B" bundle exec hanami db migrate --no-dump \
 ) > "$WORK/side_b_migrate.log" 2>&1 \
   || { cat "$WORK/side_b_migrate.log" >&2; fail "app migrations failed (side B)"; }
 
@@ -82,8 +92,8 @@ done
 "$PSQL" -q -At -d "$DB_B" -f "$CATALOG" > "$WORK/side_b.txt" 2> "$WORK/side_b.err" \
   || { cat "$WORK/side_b.err" >&2; fail "catalog query failed on side B"; }
 
-SHA_A="$(shasum -a 256 "$WORK/side_a.txt" | cut -d' ' -f1)"
-SHA_B="$(shasum -a 256 "$WORK/side_b.txt" | cut -d' ' -f1)"
+SHA_A="$($SHA256_TOOL "$WORK/side_a.txt" | cut -d' ' -f1)"
+SHA_B="$($SHA256_TOOL "$WORK/side_b.txt" | cut -d' ' -f1)"
 N_A="$(wc -l < "$WORK/side_a.txt" | tr -d ' ')"
 N_B="$(wc -l < "$WORK/side_b.txt" | tr -d ' ')"
 

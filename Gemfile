@@ -31,6 +31,12 @@ gem "async-redis", "0.14.0"
 gem "async-job", "0.11.1"
 gem "async-job-processor-redis", "0.3.1"
 
+# The embeddings wire (the embed pipeline's only wire client; the registry row
+# owns model naming, the endpoint, and the key ref — the gem never sees a
+# kquest concept). Exact pin: 0.1.1 is the driver-run fix for the 0.1.0
+# live-read defect (framed replies truncated at frame 1).
+gem "fast-embeddings", "0.1.1"
+
 # File attachments
 gem "shrine", "3.10.2"
 
