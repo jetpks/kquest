@@ -38,18 +38,25 @@ module Kquest
   #   kind: :raw       → raw/<user>/<fetch-id>           (the raw response,
   #                      provenance)
   #   kind: :report    → reports/<report-version-id>     (D8's third blob class)
+  #   kind: :transcript→ sessions/<session-uuid>/transcript.jsonl
+  #                      (the I01 CHECK law on sessions.transcript_blob_key —
+  #                      `^sessions/[0-9a-f-]{36}/transcript\.jsonl$` — schema
+  #                      beats the stale prose layout; driver-ruled I13)
   #
-  # Transcripts are APPEND-MODE files under the same store — never written
-  # here (no Shrine write path; appending is ENTRY 3's TranscriptLedger):
-  #
-  #   TRANSCRIPTS_LAYOUT: transcripts/<quest>/<session>/transcript.jsonl
-  #
+  # Transcripts are APPEND-MODE files — never written here (no Shrine write
+  # path; `store(kind: :transcript)` raises; appending is I13's
+  # TranscriptLedger, which calls location_for(:transcript, session_id:) as
+  # the single layout source).
   class BlobUploader < Shrine
-    # The transcript layout constant — the append writer (ENTRY 3) builds
-    # locations as format(TRANSCRIPTS_LAYOUT, ...). Documented, not written.
-    TRANSCRIPTS_LAYOUT = "transcripts/%<quest>s/%<session>s/transcript.jsonl"
+    # The CHECK-law transcript layout (I13 Part 3, schema-beats-prose): the
+    # I01 CHECK on sessions.transcript_blob_key is the layout law of record.
+    TRANSCRIPTS_LAYOUT = "sessions/%<session>s/transcript.jsonl"
 
     def self.store(io, kind:, **ids)
+      raise ArgumentError,
+            "kind :transcript is append-mode only — the Shrine write path never fires for it " \
+            "(the TranscriptLedger appends at location_for(:transcript, session_id:))" if kind == :transcript
+
       location = location_for(kind, **ids)
       upload(io, :store, location: location).to_json
     end
@@ -61,8 +68,15 @@ module Kquest
       when :snapshot then "snapshots/#{ids.fetch(:user)}/#{ids.fetch(:source_urn)}"
       when :raw      then "raw/#{ids.fetch(:user)}/#{ids.fetch(:fetch_id)}"
       when :report   then "reports/#{ids.fetch(:report_version_id)}"
+      when :transcript
+        unless ids[:session_id]
+          raise ArgumentError,
+                "kind :transcript requires session_id (the CHECK-law layout is " \
+                "sessions/<session-uuid>/transcript.jsonl); got #{ids.keys.inspect}"
+        end
+        "sessions/#{ids.fetch(:session_id)}/transcript.jsonl"
       else raise ArgumentError, "unknown blob kind: #{kind.inspect} " \
-                                "(expected :snapshot, :raw, or :report)"
+                                "(expected :snapshot, :raw, :report, or :transcript)"
       end
     end
   end

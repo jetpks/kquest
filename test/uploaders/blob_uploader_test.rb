@@ -40,11 +40,12 @@ class BlobUploaderTest < Minitest::Test
     end
   end
 
-  # The transcript root is documented as a constant (the append writer is
-  # ENTRY 3's TranscriptLedger; no Shrine write path here).
+  # The transcript layout constant — the CHECK-law layout (I13 Part 3,
+  # schema-beats-prose driver ruling): the I01 CHECK on
+  # sessions.transcript_blob_key is the layout law of record.
   def test_transcripts_layout_constant
-    assert_equal "transcripts/q-1/s-2/transcript.jsonl",
-                 format(Kquest::BlobUploader::TRANSCRIPTS_LAYOUT, quest: "q-1", session: "s-2")
+    assert_equal "sessions/s-2/transcript.jsonl",
+                 format(Kquest::BlobUploader::TRANSCRIPTS_LAYOUT, session: "s-2")
   end
 
   def test_store_round_trip_via_uploaded_file

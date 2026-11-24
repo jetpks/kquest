@@ -327,6 +327,20 @@ CREATE TABLE public.embedding_models (
 
 
 --
+-- Name: engine_config; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.engine_config (
+    key text NOT NULL,
+    value numeric NOT NULL,
+    mode text DEFAULT 'advisory'::text NOT NULL,
+    provenance text NOT NULL,
+    CONSTRAINT ck_engine_config_mode CHECK ((mode = ANY (ARRAY['advisory'::text, 'hard'::text]))),
+    CONSTRAINT ck_engine_config_value CHECK ((value >= (0)::numeric))
+);
+
+
+--
 -- Name: evidence; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -412,6 +426,43 @@ CREATE TABLE public.ladder_passes (
     evidence_ref text NOT NULL,
     passed_by text NOT NULL,
     CONSTRAINT ladder_passes_rung_check CHECK ((rung = ANY (ARRAY['probe'::text, 'smoke'::text, 'partial'::text, 'full'::text])))
+);
+
+
+--
+-- Name: llm_providers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.llm_providers (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    base_url text NOT NULL,
+    api_key_ref text,
+    dialect text,
+    model_id text NOT NULL,
+    context_window integer NOT NULL,
+    max_tokens integer,
+    reasoning boolean NOT NULL,
+    thinking_level_map jsonb,
+    timeout_s integer,
+    ttfb_timeout_s integer,
+    inactivity_timeout_s integer,
+    max_retries integer,
+    transcript_ceiling_warn_bytes integer DEFAULT 450000 NOT NULL,
+    transcript_ceiling_hard_bytes integer DEFAULT 496000 NOT NULL,
+    cache_wall_tokens integer,
+    cost_per_mtok_in numeric(12,6),
+    cost_per_mtok_out numeric(12,6),
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ck_llm_providers_api_key_ref CHECK (((api_key_ref IS NULL) OR (api_key_ref ~ '^env:[A-Za-z_][A-Za-z0-9_]*$'::text))),
+    CONSTRAINT ck_llm_providers_base_url_nonempty CHECK ((char_length(btrim(base_url)) > 0)),
+    CONSTRAINT ck_llm_providers_ceilings_positive CHECK (((transcript_ceiling_warn_bytes > 0) AND (transcript_ceiling_hard_bytes > 0) AND ((cache_wall_tokens IS NULL) OR (cache_wall_tokens > 0)))),
+    CONSTRAINT ck_llm_providers_context_window CHECK ((context_window > 0)),
+    CONSTRAINT ck_llm_providers_costs_nonneg CHECK ((((cost_per_mtok_in IS NULL) OR (cost_per_mtok_in >= (0)::numeric)) AND ((cost_per_mtok_out IS NULL) OR (cost_per_mtok_out >= (0)::numeric)))),
+    CONSTRAINT ck_llm_providers_model_id_nonempty CHECK ((char_length(btrim(model_id)) > 0)),
+    CONSTRAINT ck_llm_providers_name_nonempty CHECK ((char_length(btrim(name)) > 0)),
+    CONSTRAINT ck_llm_providers_retries_nonneg CHECK (((max_retries IS NULL) OR (max_retries >= 0))),
+    CONSTRAINT ck_llm_providers_timeouts_positive CHECK ((((timeout_s IS NULL) OR (timeout_s > 0)) AND ((ttfb_timeout_s IS NULL) OR (ttfb_timeout_s > 0)) AND ((inactivity_timeout_s IS NULL) OR (inactivity_timeout_s > 0))))
 );
 
 
@@ -703,6 +754,19 @@ CREATE TABLE public.stop_rules (
     CONSTRAINT ck_stop_rules_operator CHECK ((operator = ANY (ARRAY['>='::text, '>'::text, '<='::text, '<'::text]))),
     CONSTRAINT ck_stop_rules_rule_id CHECK ((rule_id ~ '^SR-[0-9]{2}$'::text)),
     CONSTRAINT ck_stop_rules_scope CHECK ((scope = ANY (ARRAY['quest'::text, 'phase'::text])))
+);
+
+
+--
+-- Name: subagent_profiles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.subagent_profiles (
+    name text NOT NULL,
+    tools jsonb NOT NULL,
+    provenance text NOT NULL,
+    CONSTRAINT ck_subagent_profiles_name_nonempty CHECK ((char_length(btrim(name)) > 0)),
+    CONSTRAINT ck_subagent_profiles_tools CHECK (((jsonb_typeof(tools) = 'array'::text) AND (jsonb_array_length(tools) > 0)))
 );
 
 
@@ -1141,6 +1205,14 @@ ALTER TABLE ONLY public.embedding_models
 
 
 --
+-- Name: engine_config engine_config_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.engine_config
+    ADD CONSTRAINT engine_config_pkey PRIMARY KEY (key);
+
+
+--
 -- Name: evidence_edges evidence_edges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1170,6 +1242,14 @@ ALTER TABLE ONLY public.frontier_entries
 
 ALTER TABLE ONLY public.ladder_passes
     ADD CONSTRAINT ladder_passes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: llm_providers llm_providers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.llm_providers
+    ADD CONSTRAINT llm_providers_pkey PRIMARY KEY (id);
 
 
 --
@@ -1282,6 +1362,14 @@ ALTER TABLE ONLY public.sources
 
 ALTER TABLE ONLY public.stop_rules
     ADD CONSTRAINT stop_rules_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: subagent_profiles subagent_profiles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subagent_profiles
+    ADD CONSTRAINT subagent_profiles_pkey PRIMARY KEY (name);
 
 
 --
@@ -1482,6 +1570,14 @@ ALTER TABLE ONLY public.frontier_entries
 
 ALTER TABLE ONLY public.frontier_entries
     ADD CONSTRAINT uq_frontier_need UNIQUE (quest_id, need);
+
+
+--
+-- Name: llm_providers uq_llm_providers_name; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.llm_providers
+    ADD CONSTRAINT uq_llm_providers_name UNIQUE (name);
 
 
 --
@@ -2534,4 +2630,5 @@ INSERT INTO schema_migrations (filename) VALUES
 ('20261124000004_add_retrieval_i03.rb'),
 ('20261124000005_add_ladder_passes.rb'),
 ('20261124000006_add_users_auth_columns.rb'),
-('20261124000007_add_quest_process_config_tables.rb');
+('20261124000007_add_quest_process_config_tables.rb'),
+('20261124000008_add_engine_config_i04.rb');
