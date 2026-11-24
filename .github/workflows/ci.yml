@@ -1,0 +1,209 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ruby-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # The committed config/db/structure.sql carries CREATE EXTENSION vector
+        # and is a PG 18.7 dump: the inherited postgres:17 image can neither
+        # load it nor serve the migrated schema. pgvector/pgvector:pg18 ships
+        # PostgreSQL 18 + the vector extension.
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      HANAMI_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/kquest_test
+      REDIS_URL: redis://localhost:6379/1
+      SESSION_SECRET: test-secret-change-in-production-must-be-at-least-64-chars-min-padding-ok
+      BUNDLE_PATH: vendor/bundle
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - uses: actions/cache@v6
+        with:
+          path: vendor/bundle
+          key: bundle-ruby-${{ hashFiles('Gemfile.lock') }}
+          restore-keys: bundle-ruby-
+      # config/db/structure.sql is a PostgreSQL 18.7 dump (CREATE EXTENSION
+      # vector; transaction_timeout); ubuntu-latest bundles psql 16, which can
+      # neither load it nor run the pg_database existence check against a v18
+      # server. Install psql 18 from the PGDG apt repo: apt resolves the live
+      # client-common/libpq5 point releases (the old exact-version pool pins
+      # 404'd once PGDG rotated them) and follows the runner's distro when
+      # ubuntu-latest moves.
+      - name: Install PostgreSQL 18 client
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+      - run: bundle install
+      - run: bundle exec hanami db prepare
+      - run: bundle exec rake test 2>&1 | tee /tmp/rake-test.log
+      - if: always()
+        name: Summary
+        run: |
+          echo "## Ruby tests" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^\d+ runs,' /tmp/rake-test.log >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  # The prior design checkers as regression law (I12 AC4; I15 additive),
+  # scoped EXACTLY to I01–I03 + I07 + the migration fidelity harness: the I06
+  # checkers grep absolute PoC paths (local frozen law — never CI), and the
+  # live-key smoke is never CI. Each checker is self-contained (scratch dbs,
+  # drop-if-exists) and runs AS-IS; its bare `psql -d postgres` honors the
+  # PG* env below. The I07 check-tripwires.sh line is I15's additive scope
+  # extension: its consumer (the assurance_alert poller) landed at I15, and
+  # unlike the I04/I05/I06 checkers it carries no absolute PoC paths — the
+  # recorded exclusion reason does not apply to it.
+  design-regression:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      # The fidelity harness builds side B's DATABASE_URL on this base
+      # (default postgres:/// = local socket; CI points it at the service).
+      DB_URL_BASE: postgres://postgres:postgres@localhost:5432/
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - name: Install PostgreSQL 18 client
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+      - run: bundle install
+      - name: Design checkers (I01–I03, I07 — as-is)
+        run: |
+          bash design/I01-core-model/artifacts/check-ddl.sh
+          bash design/I01-core-model/artifacts/check-constraints.sh
+          bash design/I01-core-model/artifacts/check-coverage.sh
+          bash design/I02-cross-quest/artifacts/check-ddl.sh
+          bash design/I02-cross-quest/artifacts/check-constraints.sh
+          bash design/I02-cross-quest/artifacts/check-coverage.sh
+          bash design/I03-retrieval/artifacts/check-ddl.sh
+          bash design/I03-retrieval/artifacts/check-constraints.sh
+          bash design/I03-retrieval/artifacts/check-coverage.sh
+          bash design/I07-assurance/artifacts/check-tripwires.sh
+      - name: Migration fidelity harness
+        run: |
+          bash script/design_fidelity_check.sh
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm test
+      - run: npm run check
+
+  gem-suites:
+    runs-on: ubuntu-latest
+    env:
+      BUNDLE_PATH: vendor/bundle
+    strategy:
+      matrix:
+        gem:
+          - hanami-credentials
+          - hanami-force-ssl
+          - hanami-healthcheck
+          - inertia-hanami
+          - vite-hanami
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - uses: actions/cache@v6
+        with:
+          path: gems/${{ matrix.gem }}/vendor/bundle
+          key: bundle-gem-${{ matrix.gem }}-${{ hashFiles(format('gems/{0}/Gemfile.lock', matrix.gem)) }}
+          restore-keys: bundle-gem-${{ matrix.gem }}-
+      - run: bundle install
+        working-directory: gems/${{ matrix.gem }}
+      - run: bundle exec rake test 2>&1 | tee /tmp/rake-test.log
+        working-directory: gems/${{ matrix.gem }}
+      - if: always()
+        name: Summary
+        run: |
+          echo "## Gem suite: ${{ matrix.gem }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^\d+ runs,' /tmp/rake-test.log >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  security-audit:
+    runs-on: ubuntu-latest
+    env:
+      BUNDLE_PATH: vendor/bundle
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - uses: actions/cache@v6
+        with:
+          path: vendor/bundle
+          key: bundle-ruby-${{ hashFiles('Gemfile.lock') }}
+          restore-keys: bundle-ruby-
+      - run: bundle install
+      - run: gem install bundler-audit
+      - run: bundler-audit check --update 2>&1 | tee /tmp/audit.log
+        continue-on-error: true
+      - if: always()
+        name: Summary
+        run: |
+          echo "## Security audit" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -5 /tmp/audit.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
