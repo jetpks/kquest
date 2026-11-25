@@ -83,7 +83,7 @@ module Kquest
 
       def web_calls_used
         conn[:tool_calls].where(quest_id: quest_id, ok: true)
-                         .where(Sequel[:tool] => %w[web_search web_fetch]).count
+                         .where(Sequel[:tool] => %w[web_search web_fetch agenda_stage]).count
       end
     end
   end

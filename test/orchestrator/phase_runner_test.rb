@@ -318,4 +318,156 @@ class PhaseRunnerTest < Minitest::Test
     assert_operator event_types.count { |t| t == "quest.stop" }, :>=, 1
     _ = advisory_alerts
   end
+
+  # ── the §8 amendment's runner branch (AC12) ─────────────────────────
+
+  # A fake executor for the branch tests (the branch's own law is the
+  # DELEGATION + the verdict mapping; the exchange's internals are the
+  # BriefingExecutorTest's and the integration test's subject).
+  class FakeExecutor
+    attr_reader :served, :exchanged, :session
+
+    def initialize(rows:, error: nil)
+      @rows = rows
+      @error = error
+      @served = 0
+      @exchanged = []
+    end
+
+    def consume_next!(quest:, session:)
+      @served += 1
+      @quest = quest
+      @session = session
+      @rows.shift
+    end
+
+    def exchange!(quest:, session:, row:)
+      @exchanged << row
+      raise @error if @error
+
+      :completed
+    end
+  end
+
+  def open_operator_session
+    phase = conn[:phases].where(quest_id: @quest_id, kind: "decompose", round_no: 1).first ||
+            conn[:phases].where(id: conn[:phases].insert(
+              user_id: @user_id, quest_id: @quest_id, kind: "decompose",
+              round_no: 1, state: "pending"
+            )).first
+    conn[:sessions].insert(user_id: @user_id, quest_id: @quest_id, phase_id: phase.fetch(:id),
+                           mode: "interactive", driver: "operator", model: "test-provider")
+  end
+
+  def stub_executor(fake)
+    @runner.instance_variable_set(:@briefing_executor, fake)
+  end
+
+  def test_open_operator_session_branches_first_and_serves_the_queue
+    phase_id = conn[:phases].insert(user_id: @user_id, quest_id: @quest_id, kind: "decompose",
+                                    round_no: 1, state: "pending")
+    session_id = open_operator_session
+    row = {id: "row-1", body: "the operator's turn"}
+    fake = FakeExecutor.new(rows: [row])
+    stub_executor(fake)
+
+    verdict = @runner.run_next(@quest_id)
+
+    assert_equal :briefing_ran, verdict
+    assert_equal 1, fake.exchanged.size
+    assert_equal row, fake.exchanged.first
+    assert_equal session_id, fake.session.fetch(:id)
+    assert_equal 1, conn[:sessions].where(quest_id: @quest_id).count,
+                 "the exchange serves the OPERATOR session — no second session"
+    _ = phase_id
+  end
+
+  def test_open_operator_session_with_nothing_enqueued_holds
+    conn[:phases].insert(user_id: @user_id, quest_id: @quest_id, kind: "decompose",
+                         round_no: 1, state: "pending")
+    open_operator_session
+    stub_executor(FakeExecutor.new(rows: []))
+
+    assert_equal :briefing_hold, @runner.run_next(@quest_id)
+  end
+
+  def test_engine_error_from_the_exchange_is_loud_and_still_briefing_ran
+    conn[:phases].insert(user_id: @user_id, quest_id: @quest_id, kind: "decompose",
+                         round_no: 1, state: "pending")
+    open_operator_session
+    fake = FakeExecutor.new(rows: [{id: "row-1", body: "x"}],
+                            error: Kquest::Engine::Error.new("the governor banked the session"))
+    stub_executor(fake)
+
+    verdict = @runner.run_next(@quest_id)
+
+    assert_equal :briefing_ran, verdict,
+                 "the turn WAS consumed and executed; the engine's own law owned the failure"
+    assert_includes @stderr.string, "BRIEFING_EXCHANGE_FAILED:", "never silent"
+    assert_includes @stderr.string, "the governor banked the session"
+  end
+
+  def test_never_started_decompose_r1_with_no_session_and_no_agenda_awaits
+    phase_id = conn[:phases].insert(user_id: @user_id, quest_id: @quest_id, kind: "decompose",
+                                    round_no: 1, state: "pending", started_at: nil)
+
+    assert_equal :awaiting_briefing, @runner.run_next(@quest_id)
+    assert_empty conn[:sessions].where(quest_id: @quest_id).to_a,
+                 "no session launched — the gate honest (the launcher re-spawns on cadence)"
+    _ = phase_id
+  end
+
+  def test_never_started_rule_is_r1_only_and_agenda_gated
+    r1_id = conn[:phases].insert(user_id: @user_id, quest_id: @quest_id, kind: "decompose",
+                                 round_no: 1, state: "pending", started_at: nil)
+    quest = quest_row
+
+    # never-started decompose ROUND 2 is not the briefing's phase: runs on
+    r2_id = conn[:phases].insert(user_id: @user_id, quest_id: @quest_id, kind: "decompose",
+                                 round_no: 2, state: "pending", started_at: nil)
+    refute @runner.send(:never_started_briefing?, conn[:phases].where(id: r2_id).first, quest),
+           "round_no == 1 is the rule's own condition"
+
+    # never-STARTED is the rule's other condition: a started pending r1 runs
+    conn[:phases].where(id: r1_id).update(started_at: Time.now)
+    refute @runner.send(:never_started_briefing?, conn[:phases].where(id: r1_id).first, quest)
+
+    # agenda staged flips the rule off (the autonomy hand-off)
+    conn[:phases].where(id: r1_id).update(started_at: nil)
+    OrchestratorFixtures.mint_source(conn, user_id: @user_id, quest_id: @quest_id,
+                                     snapshot: "agenda bytes", role: "agenda")
+    refute @runner.send(:never_started_briefing?, conn[:phases].where(id: r1_id).first, quest)
+
+    # the rule ON: pending, started_at nil, no agenda
+    conn[:quest_sources].delete
+    assert @runner.send(:never_started_briefing?, conn[:phases].where(id: r1_id).first, quest)
+  end
+
+  def test_sr02_web_call_counting_includes_agenda_stage_rows
+    # The extended predicate at the BOUNDARY (Grounds §4.5/§5.7, PHASE 0
+    # note 1): staging-only web spend crosses the quest's web line and fires
+    # the SR-02 row — the evasion the extension kills. One web_search + one
+    # agenda_stage (ok) vs a 1-call budget, HARD: used=2 > 1.
+    conn[:quests].where(id: @quest_id).update(web_call_budget: 1)
+    web_calls(1)
+    conn[:tool_calls].insert(user_id: @user_id, quest_id: @quest_id,
+                             session_id: conn[:sessions].insert(
+                               user_id: @user_id, quest_id: @quest_id,
+                               phase_id: conn[:phases].insert(
+                                 user_id: @user_id, quest_id: @quest_id, kind: "decompose",
+                                 round_no: 9
+                               ), mode: "autonomous", driver: "orchestrator",
+                               model: "test-model"
+                             ), seq: 1, tool: "agenda_stage",
+                             args: Sequel.lit("'{}'::jsonb"), result: Sequel.lit("'{}'::jsonb"),
+                             ok: true)
+    phase_id = complete_phase("descent", process_config:
+      {"modes" => {"quest.web_call_budget" => "hard"}})
+
+    verdict = boundary(phase_id)
+
+    assert_equal :entered, verdict
+    assert_includes @stderr.string, "PROCESS_STOP: SR-02",
+                    "the staged fetch counts at the boundary (the extended predicate)"
+  end
 end

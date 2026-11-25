@@ -7,7 +7,9 @@ module Kquest
     # budget line is HARD and exhausted the call is REFUSED before the wire
     # (the frozen text names the corpus tools + the never-reportless route).
     # Budget counting is DERIVED: the quest's tool_calls rows with tool IN
-    # ('web_search','web_fetch') AND ok — never stored.
+    # ('web_search','web_fetch','agenda_stage') AND ok — never stored (the
+    # staging tool joined the predicate in I18: a wire fetch is a web call,
+    # SR-02/D10).
     class WebSearch < Base
       tool_name "web_search"
 
@@ -52,7 +54,7 @@ module Kquest
 
       def web_calls_used
         conn[:tool_calls].where(quest_id: quest_id, ok: true)
-                         .where(Sequel[:tool] => %w[web_search web_fetch]).count
+                         .where(Sequel[:tool] => %w[web_search web_fetch agenda_stage]).count
       end
     end
   end

@@ -87,4 +87,64 @@ class QuestWorkerTest < Minitest::Test
       conn[:phases].where(id: phase_id).delete if phase_id
     end
   end
+
+  # ── the §8 amendment's loop law (AC7): the briefing verdicts LOOP ──────
+
+  # A stub runner carrying a scripted verdict sequence + a probe for the
+  # after_turn wiring (the worker wires `-> { periodic_passes }` at boot).
+  class ScriptedRunner
+    attr_reader :after_turn_set
+    attr_accessor :verdicts
+
+    def initialize(verdicts)
+      @verdicts = verdicts
+      @after_turn_set = nil
+    end
+
+    def after_turn=(callable)
+      @after_turn_set = callable
+    end
+
+    def run_next(_quest_id)
+      v = @verdicts.shift
+      raise Minitest::Assertion, "the scripted verdicts ran dry (a LOOP ran away)" if v.nil?
+
+      v
+    end
+  end
+
+  def scripted_worker(quest_id, runner)
+    r = registry(quest_id)
+    supervisor = Kquest::Engine::SessionSupervisor.new(conn: conn, liveness: r)
+    Kquest::Orchestrator::QuestWorker.new(conn: conn, quest_id: quest_id, registry: r,
+                                          supervisor: supervisor, runner: runner,
+                                          watcher: nil, projector: nil,
+                                          sleeper: ->(_s) {})
+  end
+
+  def test_worker_loops_on_briefing_hold_and_briefing_ran_and_wires_after_turn
+    quest_id = mint_quest(state: "active")
+    runner = ScriptedRunner.new(%i[briefing_hold briefing_ran briefing_hold no_work])
+    passes = 0
+
+    Sync do
+      worker = scripted_worker(quest_id, runner)
+      # periodic_passes probe: the projector seam (the loop's own pass list:
+      # reaper sweep + projector pass + watcher census).
+      projector = Object.new
+      projector.define_singleton_method(:project) { |_qid| passes += 1 }
+      worker.instance_variable_set(:@projector, projector)
+
+      verdict = worker.run
+
+      assert_equal :no_work, verdict,
+                   "the loop CONTINUED through briefing_hold/briefing_ran (never exited on them)"
+      assert_empty runner.verdicts, "the three briefing verdicts + the exit verdict were consumed"
+      wired = runner.after_turn_set
+      refute_nil wired, "the worker wired the after_turn callable at boot"
+      before = passes
+      wired.call
+      assert_equal before + 1, passes, "the wired callable IS the loop's periodic passes"
+    end
+  end
 end
