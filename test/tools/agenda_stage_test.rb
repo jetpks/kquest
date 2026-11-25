@@ -92,16 +92,37 @@ class AgendaStageTest < Minitest::Test
     assert_empty conn[:tool_calls].where(tool: "agenda_stage").to_a
   end
 
+  # The landed hard-mode test, rewritten to the FIXED mode source (I20 Part
+  # 5): the quest's process_config modes under the registry key
+  # quest.web_call_budget — the engine_config row mint is dead.
   def test_budget_refusal_hard_and_exhausted_before_the_wire
-    conn[:quests].where(id: @quest_id).update(web_call_budget: 0)
-    conn[:engine_config].insert(key: "engine.web_call_budget", value: 0, mode: "hard",
-                                provenance: "test-minted budget line")
-    tool = build_tool("agenda_stage", config: Kquest::Engine.config(conn))
+    conn[:quests].where(id: @quest_id).update(
+      web_call_budget: 0,
+      process_config: Sequel.lit("?::jsonb",
+                                 JSON.generate("modes" => {"quest.web_call_budget" => "hard"}))
+    )
+    tool = build_tool("agenda_stage")
 
     error = assert_raises(Kquest::Engine::Error) { execute_tool(tool, url: "https://example.test/x") }
     assert_equal "BUDGET-EXCEEDED", error.error_class
     assert_includes error.message, "web_calls=0/0, mode=hard"
     assert_empty @mock.captured_requests, "hard+exhausted refuses BEFORE the wire"
+  end
+
+  # The I20 named pin (AC7): the mode source is the QUEST's process_config
+  # modes (the registry key) — a hardened quest line refuses BEFORE the wire.
+  def test_hard_mode_from_the_quests_process_config_refuses_before_the_wire
+    conn[:quests].where(id: @quest_id).update(
+      web_call_budget: 0,
+      process_config: Sequel.lit("?::jsonb",
+                                 JSON.generate("modes" => {"quest.web_call_budget" => "hard"}))
+    )
+    tool = build_tool("agenda_stage")
+
+    error = assert_raises(Kquest::Engine::Error) { execute_tool(tool, url: "https://example.test/x") }
+    assert_equal "BUDGET-EXCEEDED", error.error_class
+    assert_includes error.message, "web_calls=0/0, mode=hard"
+    assert_empty @mock.captured_requests, "the quest's process_config mode refuses BEFORE the wire"
   end
 
   def test_budget_echo_counts_on_the_extended_predicate

@@ -57,18 +57,39 @@ class WebFetchTest < Minitest::Test
     end
   end
 
+  # The landed hard-mode test, rewritten to the FIXED mode source (I20 Part
+  # 5): the quest's process_config modes under the registry key
+  # quest.web_call_budget — the engine_config row mint is dead.
   def test_budget_refusal_before_the_wire
-    conn[:quests].where(id: @quest_id).update(web_call_budget: 0)
-    conn[:engine_config].insert(key: "engine.web_call_budget", value: 0, mode: "hard",
-                                provenance: "test-minted budget line")
-    cfg = Kquest::Engine.config(conn)
-    tool = build_tool("web_fetch", config: cfg)
+    conn[:quests].where(id: @quest_id).update(
+      web_call_budget: 0,
+      process_config: Sequel.lit("?::jsonb",
+                                 JSON.generate("modes" => {"quest.web_call_budget" => "hard"}))
+    )
+    tool = build_tool("web_fetch")
 
     assert_refusal("web_fetch", "budget-exceeded",
                    slots: {line: "web_calls=0/0, mode=hard"}, planted: ["mode=hard"]) do
       execute_tool(tool, url: "https://example.test/never")
     end
     assert @mock.captured_requests.empty?
+  end
+
+  # The I20 named pin (AC7): the mode source is the QUEST's process_config
+  # modes (the registry key) — a hardened quest line refuses BEFORE the wire.
+  def test_hard_mode_from_the_quests_process_config_refuses_before_the_wire
+    conn[:quests].where(id: @quest_id).update(
+      web_call_budget: 0,
+      process_config: Sequel.lit("?::jsonb",
+                                 JSON.generate("modes" => {"quest.web_call_budget" => "hard"}))
+    )
+    tool = build_tool("web_fetch")
+
+    assert_refusal("web_fetch", "budget-exceeded",
+                   slots: {line: "web_calls=0/0, mode=hard"}, planted: ["mode=hard"]) do
+      execute_tool(tool, url: "https://example.test/never")
+    end
+    assert @mock.captured_requests.empty?, "the quest's process_config mode refuses BEFORE the wire"
   end
 
   # I18 (the budget predicate's extension, Grounds §4.5/§5.7): a staging

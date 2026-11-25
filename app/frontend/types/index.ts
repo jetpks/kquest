@@ -150,6 +150,8 @@ export type TranscriptLine =
 // A still-`enqueued` operator turn (the open session's service order — the
 // worker consumes ORDER BY seq).
 export type QueuedTurn = { id: string; seq: number; body: string; created_at: string }
+// (the CLOSED sessions' banked leftovers ride the same row shape as unsent —
+// same fields, different state; I20 Part 7).
 
 // The I18 CHAT page (the §8 amendment — replaced the I17 staging forms): the
 // agenda list, the agenda_staged gate state, and the topic questions ride in
@@ -165,6 +167,7 @@ export type BriefingProps = {
   topic: string
   transcript: { lines: TranscriptLine[]; omitted: number }
   queued: QueuedTurn[]
+  unsent: QueuedTurn[]
   binding_phase_id: string | null
   binding_phase: string | null
   stream_url: string

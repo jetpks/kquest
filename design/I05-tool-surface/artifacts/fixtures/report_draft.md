@@ -26,3 +26,11 @@ REFUSAL: VERSION-FROZEN: version 2 is bound (citations resolved, standing) — b
 ```
 
 EVIDENCE: design/I02-cross-quest/DESIGN.md §7
+
+### refusal: phase-not-synthesis
+
+```
+REFUSAL: PHASE-NOT-SYNTHESIS: report versions mint from a synthesis phase — this session binds decompose(1/1), whose kind is not synthesis (fk_report_versions_phase pins the version's synthesis_phase_id to a kind-synthesis phases row); report writes need a synthesis-phase binding — re-open synthesis (the console's re-synthesis door) and draft from that session; a rework is a NEW draft version
+```
+
+EVIDENCE: schema-law (fk_report_versions_phase + ck_report_versions_phase_kind)

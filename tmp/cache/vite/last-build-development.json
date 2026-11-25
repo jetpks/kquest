@@ -1,7 +1,0 @@
-{
-  "success": true,
-  "errors": "(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:\n  - `__dirname` (vite.config.ts:11:25). Use `import.meta.dirname` instead\nSet `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.\n",
-  "timestamp": "2026-11-24 23:40:04",
-  "vite_ruby": "3.11.1",
-  "digest": "a8ad28453fa0bf0f34fa0fccf3c88f760129f63a"
-}

@@ -70,6 +70,7 @@ const base: BriefingProps = {
     omitted: 2,
   },
   queued: [{ id: 't9', seq: 1, body: 'and the second half?', created_at: '' }],
+  unsent: [],
   binding_phase_id: 'p1',
   binding_phase: 'decompose(1/1)',
   stream_url: '/quests/q1/stream',
@@ -125,6 +126,27 @@ describe('Quests/Briefing', () => {
     const queued = container.querySelector('[data-testid="queued-turns"]')!
     expect(queued.textContent).toContain('#1')
     expect(queued.textContent).toContain('and the second half?')
+  })
+
+  // I20 Part 7 (the banked residue): a CLOSED operator session's still-
+  // enqueued turns render as unsent — the honest header, muted, never queued;
+  // absent when empty.
+  it('renders banked leftovers as unsent with the honest header, never as queued', () => {
+    const { container } = renderPage({
+      session: null,
+      queued: [],
+      unsent: [{ id: 'u1', seq: 1, body: 'the banked leftover', created_at: '' }],
+    })
+    expect(container.querySelector('[data-testid="queued-turns"]')).toBeNull()
+    const unsent = container.querySelector('[data-testid="unsent-turns"]')!
+    expect(unsent.textContent).toContain(
+      'Unsent — a closed session never consumes these; the next sign-off dead-letters them'
+    )
+    expect(unsent.textContent).toContain('#1')
+    expect(unsent.textContent).toContain('the banked leftover')
+
+    const empty = renderPage()
+    expect(empty.container.querySelector('[data-testid="unsent-turns"]')).toBeNull()
   })
 
   it('renders the context strip: agenda list, gate state, topic questions, topic — NOT forms', () => {

@@ -173,9 +173,16 @@ module Kquest
         refused = false
         @conn.transaction do
           raw = begin
-            guard_mutation! if tool.respond_to?(:mutates?) && tool.mutates?
-            @budgeter&.tool_budget_check!(audit_name)
-            with_deadline(audit_name, ran_description(tool, args)) { tool.execute(**args) }
+            # F4 (I20): the tool's own writes run in a SAVEPOINT nested in the
+            # outer transaction — a server-side SQL failure inside the tool
+            # rolls back to the savepoint and raises at its release, so these
+            # rescue arms stay OUTSIDE the savepoint block and the audit!
+            # below still lands in the healthy outer transaction (L8).
+            @conn.transaction(savepoint: true) do
+              guard_mutation! if tool.respond_to?(:mutates?) && tool.mutates?
+              @budgeter&.tool_budget_check!(audit_name)
+              with_deadline(audit_name, ran_description(tool, args)) { tool.execute(**args) }
+            end
           rescue Kquest::Engine::Error => e # a refusal is an in-band teaching result, never a wedge
             refused = true
             error_class = e.error_class

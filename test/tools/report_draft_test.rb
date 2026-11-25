@@ -56,4 +56,26 @@ class ReportDraftTest < Minitest::Test
     require "digest"
     assert_equal Digest::SHA256.hexdigest("\n## findings/one\na pinned body"), version[:body_sha256]
   end
+
+  # The I17 MINOR (I20 Part 6): a session bound to a NON-synthesis phase
+  # refuses with the frozen teaching text BEFORE any write; the FK would have
+  # been a 500. (The class setup pins synthesis for the happy-path tests —
+  # the mint's OWN binding is decompose 1/1, the I17 scenario; restored here.)
+  def test_non_synthesis_binding_refuses_phase_not_synthesis
+    conn[:phases].where(id: @session[:phase_id]).update(kind: "decompose")
+    phase = conn[:phases].where(id: @session[:phase_id]).first
+    assert_equal "decompose", phase[:kind]
+    # the store is process-shared: snapshot BEFORE, compare after (the store
+    # path is report-version-keyed — nothing new means no blob write)
+    store_before = Kquest::BlobUploader.storages[:store].store.keys
+
+    assert_refusal("report_draft", "phase-not-synthesis",
+                   slots: {phase: "#{phase[:kind]}(#{phase[:round_no]}/#{phase[:attempt_no]})"},
+                   planted: ["fk_report_versions_phase"]) do
+      execute_tool(@tool, section: "findings/one", body: "the body that must never land")
+    end
+    assert_empty conn[:report_versions].where(quest_id: @quest_id), "no report_versions row (L5)"
+    assert_equal store_before, Kquest::BlobUploader.storages[:store].store.keys,
+                 "no report blob write (L5: the refusal precedes ANY write)"
+  end
 end

@@ -54,6 +54,7 @@ module Quest
           topic: quest.fetch(:topic),
           transcript: transcript(session),
           queued: queued(session),
+          unsent: unsent(qid),
           binding_phase_id: binding_phase && binding_phase.fetch(:id),
           binding_phase: binding_phase && "#{binding_phase.fetch(:kind)}" \
                                           "(#{binding_phase.fetch(:round_no)}/" \
@@ -88,6 +89,26 @@ module Quest
           .where(session_id: session.fetch(:id), state: "enqueued")
           .order(:seq)
           .select(:id, :seq, :body, :created_at)
+          .to_a
+      end
+
+      # The CLOSED operator sessions' still-`enqueued` turns (the banked
+      # residue, I20 Part 7): a governor bank (bank_session!) closes the
+      # session WITHOUT the dead-letter door, so these rows are reached by NO
+      # door until the next sign-off (end_session!'s dead-letter UPDATE is
+      # quest-keyed and catches them then). Rendered mutation-free as unsent —
+      # never queued (PH0-CU-2: only an open session's rows are servable); no
+      # new door, no worker change, no cap.
+      def unsent(quest_id)
+        conn[:briefing_turns]
+          .join(:sessions, Sequel[:sessions][:id] => Sequel[:briefing_turns][:session_id])
+          .where(Sequel[:sessions][:quest_id] => quest_id,
+                 Sequel[:sessions][:driver] => "operator")
+          .exclude(Sequel[:sessions][:ended_at] => nil)
+          .where(Sequel[:briefing_turns][:state] => "enqueued")
+          .order(Sequel[:briefing_turns][:seq])
+          .select(Sequel[:briefing_turns][:id], Sequel[:briefing_turns][:seq],
+                  Sequel[:briefing_turns][:body], Sequel[:briefing_turns][:created_at])
           .to_a
       end
 

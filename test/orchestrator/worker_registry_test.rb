@@ -94,4 +94,14 @@ class WorkerRegistryTest < Minitest::Test
     assert probe.session_live?("s-x"), "any worker sees the holder's claim"
     refute probe.session_live?("s-never")
   end
+
+  # F5 (I20 Part 3): the file's own source carries the explicit
+  # `require "time"` (the named pin a hygiene finding gets). Ruby 4.0
+  # resolves `Time#iso8601` in CORE — so this is explicit-dependency hygiene,
+  # the discoverability law, not a live bug.
+  def test_requires_time_explicitly
+    source = File.read(File.expand_path("../../lib/kquest/orchestrator/worker_registry.rb", __dir__))
+    assert_includes source, 'require "time"',
+                    "the explicit require joins the file's own requires (json/securerandom/socket)"
+  end
 end

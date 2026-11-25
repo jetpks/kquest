@@ -34,13 +34,15 @@ module Kquest
       private
 
       # The web-call budget line: value = quests.web_call_budget (L9 — the
-      # parity law); mode = the engine_config line's mode (advisory by
-      # default, DR-09; a hard+exhausted line refuses BEFORE the wire).
+      # parity law); mode = the quest's process_config modes under the
+      # registry key quest.web_call_budget (the quest_budget_mode source —
+      # advisory by default, DR-09; a hard+exhausted line refuses BEFORE the
+      # wire).
       def check_budget!
         quest = conn[:quests].where(id: quest_id).first
         used = web_calls_used
         cap = quest.fetch(:web_call_budget)
-        mode = cfg_mode("engine.web_call_budget") || "advisory"
+        mode = quest_budget_mode(quest)
         return unless mode == "hard" && used >= cap
 
         refuse("web_search", "budget-exceeded",

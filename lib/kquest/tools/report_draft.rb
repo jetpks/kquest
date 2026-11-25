@@ -71,6 +71,16 @@ module Kquest
         return row if row
         return nil unless create
 
+        # The I17 MINOR (I20 Part 6): a non-synthesis BINDING phase would hit
+        # fk_report_versions_phase (composite → phases.kind) as a 500 — the
+        # precondition is taught AT THE TOOL, before ANY write (L5).
+        phase = conn[:phases].where(id: phase_id).first
+        if phase && phase.fetch(:kind) != "synthesis"
+          refuse("report_draft", "phase-not-synthesis",
+                 phase: "#{phase.fetch(:kind)}(#{phase.fetch(:round_no)}/" \
+                        "#{phase.fetch(:attempt_no)})")
+        end
+
         seq = (conn[:report_versions].where(quest_id: quest_id).max(:version_seq) || 0) + 1
         fingerprint = conn[:v_quest_graph_fingerprint].where(quest_id: quest_id).get(:graph_fingerprint)
         id = SecureRandom.uuid
