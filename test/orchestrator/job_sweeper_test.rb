@@ -3,6 +3,7 @@
 require_relative "../test_helper"
 require "async"
 require_relative "../support/orchestrator_fixtures"
+require_relative "../support/pipeline_fixtures"
 require_relative "../../lib/kquest/orchestrator/job_sweeper"
 require_relative "../../lib/kquest/orchestrator/worker_registry"
 require_relative "../../lib/kquest/engine/session_supervisor"
@@ -14,6 +15,22 @@ require_relative "../../lib/kquest/engine/session_supervisor"
 # row is orphaned; a live one claims them all).
 class JobSweeperTest < Minitest::Test
   def setup
+    # Self-healing model row (the I16 71069b0 law — the 3rd order-dependent
+    # flake of the class, caught post-I20-integration): the sweeper's
+    # fixtures reference the MINILM model row the EMBED-PIPELINE tests
+    # register; under parallel scheduling this file can run before any of
+    # them and fk_embed_jobs_model bites. The sweeper never calls the wire —
+    # an inert endpoint suffices.
+    if conn[:embedding_models].where(id: PipelineFixtures::MINILM_MODEL_ID).empty?
+      conn[:embedding_models].insert(
+        id: PipelineFixtures::MINILM_MODEL_ID, slug: "minilm-ab-384",
+        wire_name: "mock-embed-#{PipelineFixtures::MINILM_DIMS}", provider: "mock",
+        endpoint: "http://localhost:9/vitro/embeddings", api_key_ref: nil,
+        dimensions: PipelineFixtures::MINILM_DIMS, metric: "cosine",
+        batch_max_texts: 64, input_max_chars: 8192, status: "active",
+        retired_at: nil, table_name: PipelineFixtures::MINILM_TABLE,
+        registered_at: Time.now)
+    end
     @tenancy = OrchestratorFixtures.mint_tenancy(conn)
     @user_id = @tenancy[:user_id]
     @quest_id = @tenancy[:quest_id]
