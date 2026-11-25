@@ -70,4 +70,22 @@ class WebFetchTest < Minitest::Test
     end
     assert @mock.captured_requests.empty?
   end
+
+  # I18 (the budget predicate's extension, Grounds §4.5/§5.7): a staging
+  # fetch IS a web call — the hard refusal AND the echo count on the
+  # extended predicate (web_search + web_fetch + agenda_stage). Both sides:
+  # the COUNT+ECHO here, the staging tool's own side in agenda_stage_test.rb.
+  def test_web_call_count_and_echo_include_a_staged_agenda_fetch
+    conn[:tool_calls].insert(user_id: @user_id, quest_id: @quest_id,
+                             session_id: @session.fetch(:id), seq: 1, tool: "agenda_stage",
+                             args: Sequel.lit("'{}'::jsonb"), result: Sequel.lit("'{}'::jsonb"),
+                             ok: true)
+    @mock.script([{type: :results, results: [{url: "https://example.test/staged-after",
+                                              title: "S", text: "body"}]}])
+
+    text = execute_tool(@tool, url: "https://example.test/staged-after")
+
+    assert_includes text, "web_calls=2/16",
+                    "the echo: the staged fetch + THIS fetch (used+1, the landed arithmetic)"
+  end
 end

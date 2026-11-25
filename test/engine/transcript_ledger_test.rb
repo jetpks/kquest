@@ -147,4 +147,32 @@ class TranscriptLedgerTest < Minitest::Test
     assert_equal [], json_lines(ledger).select { |r| %w[final salvage].include?(r["type"]) },
                  "no phantom terminal line"
   end
+
+  # I18 (the §8 amendment): the operator turn's transcript line — ONE
+  # `{type: "operator", body: …}` JSONL line, its own write (buffered +
+  # flushed), landed by the WORKER at consume time; the blob's location/sink
+  # law unchanged; the line joins the L8 verbatim record the briefing
+  # exchange rebuilds the conversation from.
+  def test_append_operator_lands_one_operator_line_and_flushes
+    ledger = Kquest::Engine::TranscriptLedger.new(
+      conn: conn,
+      session: {id: @tenancy[:session_id], user_id: @user_id, quest_id: @tenancy[:quest_id],
+                phase_id: @tenancy[:phase_id], model: "test-model"}
+    )
+
+    Sync do
+      ledger.append_operator!(body: "steer the decomposition toward decay studies")
+      ledger.append_operator!(body: "second operator turn")
+    end
+
+    lines = ledger.sink.blobs.values.join.split("\n")
+    parsed = lines.map { |l| JSON.parse(l) }
+    assert_equal 2, parsed.size, "exactly one line per append_operator! — nothing else"
+    assert_equal({"type" => "operator", "body" => "steer the decomposition toward decay studies"},
+                 parsed[0])
+    assert_equal({"type" => "operator", "body" => "second operator turn"}, parsed[1])
+    assert_operator ledger.bytes, :>, 0, "the append flushed to the blob (buffer emptied)"
+    assert_equal format(CHECK, @tenancy[:session_id]), ledger.location,
+                 "the operator line rides the session's own blob (location law unchanged)"
+  end
 end

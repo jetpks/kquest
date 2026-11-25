@@ -66,4 +66,21 @@ class WebSearchTest < Minitest::Test
     assert_equal "/search", logged[0][:path]
     assert_equal "the query", logged[0][:body]["query"]
   end
+
+  # I18 (the budget predicate's extension, Grounds §4.5/§5.7): a staging
+  # fetch IS a web call — an ok `agenda_stage` tool_calls row counts in the
+  # derived predicate, and the echo reflects it. Both sides: the COUNT here,
+  # the staging tool's own side in agenda_stage_test.rb.
+  def test_web_call_count_includes_a_staged_agenda_fetch
+    conn[:tool_calls].insert(user_id: @user_id, quest_id: @quest_id,
+                             session_id: @session.fetch(:id), seq: 1, tool: "agenda_stage",
+                             args: Sequel.lit("'{}'::jsonb"), result: Sequel.lit("'{}'::jsonb"),
+                             ok: true)
+    @mock.script([{type: :results, results: []}])
+
+    text = execute_tool(@tool, query: "fixture query")
+
+    assert_includes text, "web_calls=1/16",
+                    "the count includes the staged fetch (the extended predicate)"
+  end
 end

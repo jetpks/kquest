@@ -80,16 +80,22 @@ class SeedContractTest < Minitest::Test
   # (tools.web_search_cap / tools.report_section_chars_cap) are GONE. The
   # I17 surfaces (console, briefing) ride the same discipline — the provenance
   # names the iteration that authored the cap (the F1-class law: the
-  # provenance names its own spec part, never a false one).
+  # provenance names its own spec part, never a false one). The I18 chat
+  # transcript tail row rides the same law (the driver-ruled bounds
+  # exception: the frozen I18 spec mandates the row; this pinned list tracks
+  # it — the I16→I17 surface-list growth precedent).
   def test_ui_listing_cap_rows_carry_provenance_and_the_f1_rows_are_gone
     rows = conn[:tool_config].where(Sequel.like(:key, "ui.listing_cap.%"))
     surfaces = rows.select_map(:key).map { |k| k.delete_prefix("ui.listing_cap.") }
-    assert_equal %w[alerts briefing console costs dashboard frontier graph quest reports].sort,
+    assert_equal %w[alerts briefing briefing_transcript console costs dashboard frontier graph
+                    quest reports].sort,
                  surfaces.sort
     rows.each do |row|
       assert row[:num_value] && row[:num_value].positive?, "#{row[:key]} carries a numeric cap"
       expected = if row[:key].end_with?(".console")
                    "I17 Part 1"
+                 elsif row[:key].end_with?(".briefing_transcript")
+                   "I18 (the chat transcript tail; L15)"
                  elsif row[:key].end_with?(".briefing")
                    "I17 Part 3"
                  else

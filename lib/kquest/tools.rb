@@ -64,6 +64,8 @@ module Kquest
       "source_list"     => "SourceList",
       "web_search"      => "WebSearch",
       "web_fetch"       => "WebFetch",
+      "agenda_stage"    => "AgendaStage",
+      "topic_questions" => "TopicQuestions",
       "retrieve"        => "Retrieve",
       "report_draft"    => "ReportDraft",
       "report_bind"     => "ReportBind",
