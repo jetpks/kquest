@@ -266,8 +266,12 @@ assurance, and finally the application that hosts it all.
 ## Running it
 
 **Prerequisites:** Ruby 4.0, Node 24, PostgreSQL with the `pgvector`
-extension, Redis. `.env` holds the local defaults (`DATABASE_URL`,
-`SESSION_SECRET`, `REDIS_URL`).
+extension, Redis (defaults to `localhost:6379`; override via `REDIS_URL`).
+Environment values are split per environment: committed `.env.development`
+and `.env.test` carry each env's `DATABASE_URL`/`SESSION_SECRET` — Hanami
+loads `.env.<environment>` only under a matching `HANAMI_ENV`, and `.env` is
+an every-env pointer file. Real local secrets (never committed) go in
+`.env*.local`, which is gitignored.
 
 ```sh
 bundle install
@@ -278,7 +282,13 @@ bin/dev        # Vite on :3036 + Falcon on http://localhost:3000
 `bin/dev` installs frontend deps on first run. A quest worker is started
 separately (`bin/quest-worker.rb`) — one worker process per active quest.
 
-**The test suite** (709 runs / 3,032 assertions cold; 49 frontend tests):
+**Sign-in:** development boots with a **Dev sign-in** button in the nav —
+OmniAuth's `developer` form strategy, enabled via `OAUTH_PROVIDERS` in
+`.env.development` and refused at boot in any other environment. For real
+GitHub sign-in locally, put `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` (and
+`OAUTH_PROVIDERS=github`) in `.env.development.local`.
+
+**The test suite** (712 runs / 3,045 assertions; 52 frontend tests):
 
 ```sh
 bundle exec hanami db prepare   # prepares the test database
