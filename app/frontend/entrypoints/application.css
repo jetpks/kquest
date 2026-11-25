@@ -135,18 +135,24 @@
     }
   /* Form controls (operator-caught 2026-11-24): the app is permanently
      dark (html class="dark", static in the inertia layout) and the house
-     form pattern is RAW <input>/<textarea>/<select> — UA defaults render
-     white fields that inherit the near-white foreground: unreadable typed
-     text. One base rule themes every control in the tree (and future
-     ones); color-scheme fixes the native select popup + number spinners. */
+     form pattern is RAW <input>/<textarea>/<select> — the @tailwindcss/forms
+     plugin's base paints text inputs background-color:#fff (forms/src/index.js:49)
+     while text color inherits the near-white foreground: unreadable.
+     The plugin's :where()-wrapped selectors carry zero added specificity,
+     so these .dark-scoped rules (0,2,1) win the cascade over them in ANY
+     order; color-scheme additionally fixes the native select popup +
+     number spinners. */
   html.dark {
     color-scheme: dark;
   }
-  input:where(:not([type='hidden'])), textarea, select {
+  .dark input:not([type='hidden']),
+  .dark textarea,
+  .dark select {
     color: var(--foreground);
     background-color: color-mix(in oklab, var(--input) 30%, transparent);
   }
-  input::placeholder, textarea::placeholder {
+  .dark input::placeholder,
+  .dark textarea::placeholder {
     color: var(--muted-foreground);
     opacity: 1;
   }
