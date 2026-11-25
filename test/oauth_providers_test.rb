@@ -20,17 +20,20 @@ class OauthProvidersTest < Minitest::Test
       assert_includes Kquest::OAUTH_PROVIDERS, name
     end
 
-    strategy, client_id, client_secret, options =
+    strategy, positional, kwargs =
       Kquest.oauth_provider_registration("github", settings)
     assert_equal :github, strategy
-    # Credentials resolve through the mapped settings keys (nil in test env,
-    # where none are configured — same values the seed captured at boot).
+    # Credentials + options resolve through the map's settings keys as
+    # POSITIONAL args (omniauth-oauth2's signature); nil in test env, where
+    # none are configured — same values the seed captured at boot.
+    client_id, client_secret, options = positional
     entry = Kquest::OAUTH_PROVIDERS.fetch("github")
     assert_equal :github_client_id,     entry[:client_id_setting]
     assert_equal :github_client_secret, entry[:client_secret_setting]
     assert_nil client_id
     assert_nil client_secret
     assert_equal({scope: "read:user,user:email,read:org"}, options)
+    assert_empty kwargs
   end
 
   def test_csp_form_action_includes_every_enabled_provider_origin
@@ -46,5 +49,43 @@ class OauthProvidersTest < Minitest::Test
   def test_unknown_provider_name_raises
     assert_raises(KeyError) { Kquest.oauth_provider_registration("gitlab", settings) }
     assert_raises(KeyError) { Kquest.oauth_form_action_origins(["gitlab"]) }
+  end
+
+  # The dev-only developer strategy: resolves like any provider (no client
+  # credentials — the map carries nil settings keys), contributes no CSP
+  # form-action origin (its form GETs our own callback), and refuses to
+  # mount outside development.
+  def test_developer_provider_resolves_without_credentials
+    strategy, positional, kwargs =
+      Kquest.oauth_provider_registration("developer", settings)
+    assert_equal :developer, strategy
+    # The base Strategy takes NO positional args (OmniAuth 2.4 raises on
+    # leftovers) — credentials-less providers carry options as keywords only.
+    assert_empty positional
+    # fields line up with AuthenticateUser's expectations (username ←
+    # info.nickname; uid ← email), so the callback stack runs unmodified.
+    assert_equal({fields: %i[nickname email], uid_field: :email}, kwargs)
+  end
+
+  def test_developer_provider_adds_no_csp_form_action_origin
+    origins = Kquest.oauth_form_action_origins(%w[github developer])
+    assert_equal ["https://github.com"], origins
+  end
+
+  def test_developer_provider_refuses_to_mount_outside_development
+    assert_developer_guard_raises(%w[github developer], :production)
+    assert_developer_guard_raises(%w[developer], :test)
+    # Development — and any list without developer, in any env — passes.
+    Kquest.assert_developer_allowed!(%w[github developer], :development)
+    Kquest.assert_developer_allowed!(%w[github], :production)
+  end
+
+  private
+
+  def assert_developer_guard_raises(providers, env)
+    error = assert_raises(RuntimeError) do
+      Kquest.assert_developer_allowed!(providers, env)
+    end
+    assert_match(/developer.*outside development/, error.message)
   end
 end

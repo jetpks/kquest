@@ -7,6 +7,7 @@ require "hanami_force_ssl"
 require "rack/protection/host_authorization"
 require "omniauth"
 require "omniauth-github"
+require "omniauth/strategies/developer"
 require "inertia_hanami"
 require "vite_hanami"
 
@@ -31,20 +32,59 @@ module Kquest
       client_secret_setting: :github_client_secret,
       strategy_options:      {scope: "read:user,user:email,read:org"},
       form_action_origin:    "https://github.com"
+    },
+    # Dev-only sign-in without a provider app (OmniAuth's built-in form
+    # strategy — zero security by design, guarded by
+    # assert_developer_allowed!). Its form asks for nickname + email; uid =
+    # email, so AuthenticateUser's find-or-create (github_uid key, handle
+    # minted from the uid) works untouched. Enabled via OAUTH_PROVIDERS in
+    # .env.development — Hanami::Env loads .env.<env> only when HANAMI_ENV
+    # matches, so it never reaches a test/production boot;
+    # assert_developer_allowed! backstops a stray override in any other env.
+    "developer" => {
+      strategy:              :developer,
+      client_id_setting:     nil,
+      client_secret_setting: nil,
+      strategy_options:      {fields: %i[nickname email], uid_field: :email},
+      form_action_origin:    nil # its form GETs our own callback — no CSP origin
     }
   }.freeze
+
+  # The developer strategy signs in as anything typed into a form. It must
+  # never mount outside development — fail the boot loudly rather than
+  # silently disabling sign-in (the map's own fetch-not-[] discipline).
+  def self.assert_developer_allowed!(providers, env)
+    return unless providers.include?("developer")
+    return if env == :development
+
+    raise "oauth provider 'developer' is enabled outside development " \
+          "(oauth_providers=#{providers.join(',')}, env=#{env}): " \
+          "the developer strategy signs in as anyone"
+  end
 
   # The OmniAuth registration args for an enabled provider name. fetch — not
   # [] — so a name missing from the map (settings typo, strategy gem not
   # added yet) raises at boot instead of silently disabling sign-in.
+  # The registration for an enabled provider, shaped for OmniAuth::Builder's
+  # own provider(klass, *args, **opts) split: [strategy, positional_args,
+  # keyword_options]. OAuth-family strategies take their client credentials
+  # and options POSITIONALLY (omniauth-oauth2's own signature); the base
+  # Strategy (e.g. the developer form strategy) takes NO positional args —
+  # OmniAuth 2.4 raises on leftovers — so credential-less providers pass
+  # their options as keywords only.
   def self.oauth_provider_registration(name, settings)
     entry = OAUTH_PROVIDERS.fetch(name)
-    [
-      entry[:strategy],
-      settings.public_send(entry[:client_id_setting]),
-      settings.public_send(entry[:client_secret_setting]),
-      entry[:strategy_options]
-    ]
+    if entry[:client_id_setting]
+      [
+        entry[:strategy],
+        [settings.public_send(entry[:client_id_setting]),
+         settings.public_send(entry[:client_secret_setting]),
+         entry[:strategy_options]],
+        {}
+      ]
+    else
+      [entry[:strategy], [], entry[:strategy_options]]
+    end
   end
 
   # CSP form-action origins for the enabled providers: the OmniAuth request
@@ -52,7 +92,7 @@ module Kquest
   # form-action is enforced across the whole redirect chain — so every
   # enabled origin must be allow-listed (see the App class below).
   def self.oauth_form_action_origins(enabled)
-    enabled.map { |name| OAUTH_PROVIDERS.fetch(name)[:form_action_origin] }
+    enabled.filter_map { |name| OAUTH_PROVIDERS.fetch(name)[:form_action_origin] }
   end
 
   class App < Hanami::App
@@ -105,8 +145,9 @@ module Kquest
     # rack-app build time, when `settings` is out of scope — closes over
     # values, not the lazy settings method (same discipline the seed used
     # for its captured client id/secret).
-    _oauth_registrations = settings.oauth_providers.map do |name|
-      Kquest.oauth_provider_registration(name, settings)
+    _oauth_registrations = begin
+      Kquest.assert_developer_allowed!(settings.oauth_providers, Hanami.env)
+      settings.oauth_providers.map { |name| Kquest.oauth_provider_registration(name, settings) }
     end
 
     OmniAuth.config.on_failure = proc do |env|
@@ -131,8 +172,8 @@ module Kquest
     end
 
     config.middleware.use OmniAuth::Builder do
-      _oauth_registrations.each do |provider_args|
-        provider(*provider_args)
+      _oauth_registrations.each do |strategy, positional, kwargs|
+        provider(strategy, *positional, **kwargs)
       end
     end
 

@@ -25,7 +25,8 @@ Hanami.app.register_provider(:inertia) do
           flash_data[:notice] = f["notice"] if f.key?("notice")
           flash_data[:alert]  = f["alert"]  if f.key?("alert")
         end
-        { current_user: cu, flash: flash_data }
+        { current_user: cu, flash: flash_data,
+          oauth_providers: Kquest::App["settings"].oauth_providers }
       }
 
       # Request-blind layout callable: receives the inertia_body string (script element + div).

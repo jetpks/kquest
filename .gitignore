@@ -1,5 +1,8 @@
 /log/*
 /config/master.key
+# Local dotenv overrides never commit (Hanami::Env loads .env.local and
+# .env.<env>.local — real local secrets like an actual GitHub OAuth app)
+.env*.local
 /storage/
 node_modules/
 /public/vite*/
