@@ -82,18 +82,36 @@ export default function Index() {
                     <input type="hidden" name="authenticity_token" value={csrfToken()} />
                     <input name="topic" required placeholder="topic — what this quest is after"
                            className="w-full rounded border px-2 py-1 text-sm" />
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <input name="web_call_budget" type="number" min="0" placeholder="web_call_budget (int)"
-                             className="rounded border px-2 py-1 text-sm" />
-                      <input name="token_budget" type="number" min="0" placeholder="token_budget (int)"
-                             className="rounded border px-2 py-1 text-sm" />
-                      <input name="spend_budget_usd" placeholder="spend_budget_usd (e.g. 5.00)"
-                             className="rounded border px-2 py-1 text-sm" />
-                    </div>
-                    <input name="process_config" placeholder='process_config JSON object (optional), e.g. {"modes":{…}}'
-                           className="w-full rounded border px-2 py-1 text-sm" />
-                    <input name="model_config" placeholder='model_config JSON object (optional), e.g. {"decompose":"…"}'
-                           className="w-full rounded border px-2 py-1 text-sm" />
+                    <fieldset className="space-y-1">
+                      <legend data-testid="budget-semantics" className="text-xs text-muted-foreground">
+                        whole-quest lifetime caps — when one is hit the quest pauses;
+                        the console&rsquo;s resume door can only raise them, never lower
+                      </legend>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <input name="web_call_budget" type="number" min="0" placeholder="web calls, e.g. 40"
+                               className="rounded border px-2 py-1 text-sm" />
+                        <input name="token_budget" type="number" min="0" placeholder="tokens, e.g. 200000"
+                               className="rounded border px-2 py-1 text-sm" />
+                        <input name="spend_budget_usd" placeholder="US$ e.g. 2.50"
+                               className="rounded border px-2 py-1 text-sm" />
+                      </div>
+                    </fieldset>
+                    <details data-testid="advanced-routing" className="space-y-2 rounded border p-2">
+                      <summary className="cursor-pointer text-sm text-muted-foreground">
+                        Advanced routing — optional; blank uses the engine&rsquo;s configured defaults
+                      </summary>
+                      <p className="text-xs text-muted-foreground">
+                        model_config routes a phase kind to a configured model — keys:
+                        decompose · frontier-build · descent · synthesis · verification
+                      </p>
+                      <input name="model_config" placeholder='e.g. {"synthesis": "<a configured model id>"}'
+                             className="w-full rounded border px-2 py-1 text-sm" />
+                      <p className="text-xs text-muted-foreground">
+                        {'process_config sets process knobs — e.g. {"modes": {…}} advisory toggles, {"overlays": "quest-local law text"}'}
+                      </p>
+                      <input name="process_config" placeholder='e.g. {"modes": {"verification": true}}'
+                             className="w-full rounded border px-2 py-1 text-sm" />
+                    </details>
                     <button type="submit" className="rounded border px-2 py-1 text-sm">Create quest</button>
                   </form>
                 </CardContent>

@@ -133,6 +133,23 @@
   html {
     @apply font-sans;
     }
+  /* Form controls (operator-caught 2026-11-24): the app is permanently
+     dark (html class="dark", static in the inertia layout) and the house
+     form pattern is RAW <input>/<textarea>/<select> — UA defaults render
+     white fields that inherit the near-white foreground: unreadable typed
+     text. One base rule themes every control in the tree (and future
+     ones); color-scheme fixes the native select popup + number spinners. */
+  html.dark {
+    color-scheme: dark;
+  }
+  input:where(:not([type='hidden'])), textarea, select {
+    color: var(--foreground);
+    background-color: color-mix(in oklab, var(--input) 30%, transparent);
+  }
+  input::placeholder, textarea::placeholder {
+    color: var(--muted-foreground);
+    opacity: 1;
+  }
 }
 /* A one-shot ring fade marking the element a deep link or TOC jump landed on —
    applied via classList in Show's scroll effect and removed on animationend. */

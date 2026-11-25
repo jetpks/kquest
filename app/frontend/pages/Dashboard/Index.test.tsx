@@ -68,6 +68,12 @@ describe('Dashboard/Index', () => {
       expect(form!.querySelector(`[name="${name}"]`), `field ${name}`).not.toBeNull()
     }
     expect(form!.querySelector('[name="topic"]')!.hasAttribute('required')).toBe(true)
+    // The budget-semantics legend + the advanced-routing disclosure (the
+    // operator's review: caps need their duration/behavior stated, and raw
+    // JSON knobs belong behind an optional, honestly-hinted door).
+    expect(screen_text(container)).toContain('whole-quest lifetime caps')
+    expect(form!.querySelector('details[data-testid="advanced-routing"]')).not.toBeNull()
+    expect(screen_text(container)).toContain('blank uses the engine')
     expect(screen_text(container)).toContain('No quests yet.')
   })
 
