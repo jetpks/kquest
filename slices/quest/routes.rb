@@ -10,8 +10,11 @@ module Quest
   # The I17 additions (additive — the landed lines above stay byte-identical):
   # the steering console (the GET page + the FIVE ledgered steering doors —
   # resume/stop/restart/mute/session-end; I17 Parts 1, 2, 6) and the
-  # interactive briefing (the GET page + session/agenda/questions; I17 Part
-  # 3). Every write is owner-gated through the ONE OperatorWrite door.
+  # interactive briefing (the GET page + the session door + the sign-off
+  # door; I17 Part 3). The I18 chat (the §8 amendment): ONE chat surface —
+  # the staging forms are GONE and the operator turn rides the turns door
+  # (enqueue only — the worker executes; zero-auto is absolute). Every write
+  # is owner-gated through the ONE OperatorWrite door.
   class Routes < Hanami::Routes
     get  "/quests/:quest_id",           to: "quest_show"
     post "/quests/:quest_id/pause",     to: "pause"
@@ -29,7 +32,6 @@ module Quest
 
     get  "/quests/:quest_id/briefing",             to: "briefing_index"
     post "/quests/:quest_id/briefing/session",     to: "briefing_session"
-    post "/quests/:quest_id/briefing/agenda",      to: "briefing_agenda"
-    post "/quests/:quest_id/briefing/questions",   to: "briefing_questions"
+    post "/quests/:quest_id/briefing/turns",       to: "briefing_turn"
   end
 end
