@@ -81,4 +81,18 @@ class StatusSnapshotQueryTest < Minitest::Test
     assert_equal "decompose(1/1)", q[:phase]
     assert_equal "session/#{@session[:id].to_s[0, 4]}", q[:writer]
   end
+
+  # I20 Part 8 (the I18 queued drift): a wire fetch is a web call — an ok
+  # agenda_stage tool_calls row counts in web_used for BOTH parity variants
+  # (L6: the status view shows exactly what the budget gate enforces; the
+  # gate's predicate is the I18 PH0-1 three-name set).
+  def test_web_used_counts_a_staged_agenda_fetch
+    conn[:tool_calls].insert(user_id: @user_id, quest_id: @quest_id, session_id: @session[:id],
+                             seq: 1, tool: "agenda_stage", args: "{}", result: "{}", ok: true)
+    q = @query.quest_fields(user_id: @user_id, quest_id: @quest_id, session_id: @session[:id])
+    assert_equal 1, q[:web_used], "the session-bearing variant counts the staged fetch"
+
+    q = Kquest::Queries::StatusSnapshot.quest_fields_sessionless(conn, quest_id: @quest_id)
+    assert_equal 1, q[:web_used], "the sessionless variant counts the staged fetch"
+  end
 end

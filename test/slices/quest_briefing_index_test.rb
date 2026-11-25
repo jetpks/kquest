@@ -185,6 +185,40 @@ class QuestBriefingIndexTest < Minitest::Test
     assert_equal %w[skipped skipped], states, "the sign-off dead-lettered the queue"
   end
 
+  # I20 Part 7 (the banked residue): a governor bank (bank_session!) closes
+  # the session WITHOUT the dead-letter door — its still-enqueued rows are
+  # reached by no door until the next sign-off; they render as UNSENT, never
+  # queued; an open session's own rows never appear in unsent. Mutation-free:
+  # no new door, no worker change.
+  def test_banked_session_leftovers_render_as_unsent
+    session = open_briefing_session
+    Kquest::Ui::OperatorWrite.enqueue_turn!(conn, session: session, body: "the banked leftover")
+    Kquest::Engine::SessionSupervisor.new(conn: conn).bank_session!(session_id: session.fetch(:id))
+
+    _, _, body = briefing_get
+    props = parse_json(body)["props"]
+    assert_empty props["queued"], "no OPEN session — nothing is servable (PH0-CU-2)"
+    unsent = props["unsent"]
+    assert_equal 1, unsent.size, "the closed session's leftover renders as unsent"
+    assert_equal 1, unsent.first["seq"]
+    assert_equal "the banked leftover", unsent.first["body"]
+    assert unsent.first["id"], "the row id rides the unsent prop"
+    assert_equal "enqueued", conn[:briefing_turns].first[:state],
+                 "the rendering is mutation-free — the row stays enqueued"
+
+    # an OPEN session's rows are queued and NEVER unsent; the closed
+    # session's leftover stays unsent beside them.
+    open = open_briefing_session
+    Kquest::Ui::OperatorWrite.enqueue_turn!(conn, session: open, body: "the live question")
+    _, _, body = briefing_get
+    props = parse_json(body)["props"]
+    assert_equal ["the live question"], props["queued"].map { |t| t["body"] }
+    assert_equal ["the banked leftover"], props["unsent"].map { |t| t["body"] },
+                 "only CLOSED operator sessions' rows are unsent"
+  ensure
+    conn[:briefing_turns].delete
+  end
+
   def test_non_owner_is_404
     other = OrchestratorFixtures.mint_tenancy(conn, topic: "not yours")
     status, = inertia_get("/quests/#{other[:quest_id]}/briefing")

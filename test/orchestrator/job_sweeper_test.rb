@@ -139,4 +139,21 @@ class JobSweeperTest < Minitest::Test
     assert_empty result[:failed] & [done]
     assert_equal "complete", conn[:embed_jobs].where(id: done).get(:state)
   end
+
+  # F2 (I20 Part 1, the I16-order-proof class): the boot sweep's call in
+  # bin/worker.rb is EARLIER than the registry's register! — at boot,
+  # pre-register, no live job-worker heartbeat exists, so every `running`
+  # embed row is orphaned and resumes from done_items (the file's own
+  # comment's story). RED before the fix: register preceded sweep, so the
+  # boot sweep saw its OWN heartbeat and structurally no-op'd.
+  def test_boot_sweep_wires_before_the_registry_claim
+    source = File.read(File.expand_path("../../bin/worker.rb", __dir__))
+    sweep = source.index("job_sweeper.sweep")
+    register = source.index("sweep_registry.register!")
+    refute_nil sweep, "the boot sweep call is present"
+    refute_nil register, "the registry claim is present"
+    assert_operator sweep, :<, register,
+                   "the boot sweep runs BEFORE the registry claim (the singleton " \
+                   "class law makes sweep-before-register the honest boot order)"
+  end
 end

@@ -70,7 +70,7 @@ module Kquest
         quest = conn[:quests].where(id: quest_id).first
         used = web_calls_used
         cap = quest.fetch(:web_call_budget)
-        mode = cfg_mode("engine.web_call_budget") || "advisory"
+        mode = quest_budget_mode(quest)
         return unless mode == "hard" && used >= cap
 
         refuse("web_fetch", "budget-exceeded", line: "web_calls=#{used}/#{cap}, mode=#{mode}")

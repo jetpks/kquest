@@ -296,4 +296,63 @@ class ToolHarnessTest < Minitest::Test
     assert_equal 1, conn[:claims].where(quest_id: tenancy[:quest_id]).max(:quest_seq),
                  "run 2's claim rolled back with its audit row (E-AUDIT)"
   end
+
+  # ── F4 (I20 Part 2): the audit savepoint ────────────────────────────
+
+  # A rig tool whose execute performs a REAL server-side-failing write (the
+  # uq_claims_quest_seq-violating INSERT is its last act): the savepoint
+  # rolls the tool's own writes back, the audit row lands in the healthy
+  # outer transaction (ok:false, error_class set — L8), and the model sees
+  # the in-band {error:} outcome. RED before the fix: the aborted-transaction
+  # error escaped invoke — no audit row, the whole batch rolled back.
+  class SqlBreakingTool < Fast::Completions::Tool
+    description "writes then breaks (a server-side SQL failure)"
+    tool_name "sql_breaker"
+    parameters { {"type" => "object", "properties" => {}} }
+
+    def mutates? = true
+
+    def initialize(conn:, user_id:, quest_id:)
+      @conn = conn
+      @user_id = user_id
+      @quest_id = quest_id
+    end
+
+    def execute(**_args)
+      seq = (@conn[:claims].where(quest_id: @quest_id).max(:quest_seq) || 0) + 1
+      urn = "kb:claim:" + Kquest::Pipeline::Base58
+        .encode(Digest::SHA256.digest(@quest_id + "the rolled-back claim"))[0, 10]
+      @conn[:claims].insert(user_id: @user_id, quest_id: @quest_id, quest_seq: seq,
+                            text: "the write that must roll back", urn: urn)
+      # the constraint-violating INSERT (uq_claims_quest_seq) — then nothing else
+      @conn[:claims].insert(user_id: @user_id, quest_id: @quest_id, quest_seq: seq,
+                            text: "the colliding write",
+                            urn: "kb:claim:" + Kquest::Pipeline::Base58.encode(
+                              Digest::SHA256.digest(@quest_id + "the colliding write"))[0, 10])
+      {written: "never"}
+    end
+  end
+
+  def test_failed_tool_sql_leaves_its_audit_row
+    tenancy = PipelineFixtures.mint_tenancy(conn)
+    _, rig = build_engine(contract: terminal_on_text_contract,
+                          tools: [SqlBreakingTool.new(conn: conn, user_id: tenancy[:user_id],
+                                                      quest_id: tenancy[:quest_id])],
+                          tenancy: tenancy)
+    tool = SqlBreakingTool.new(conn: conn, user_id: tenancy[:user_id],
+                               quest_id: tenancy[:quest_id])
+
+    outcome = Sync { rig[:harness].invoke(tool, audit_name: "sql_breaker") }
+
+    # (c) the model-visible outcome is the in-band {error:} — unchanged
+    assert outcome.is_a?(Hash) && outcome.key?(:error), "failure isolation to THIS call"
+    # (a) the audit row SURVIVED in the healthy outer transaction (L8)
+    audit = conn[:tool_calls].where(session_id: rig[:session][:id], tool: "sql_breaker").first
+    refute_nil audit, "the audit row lands even though the tool's SQL failed (F4/L8)"
+    assert_equal false, audit[:ok]
+    assert audit[:error_class], "error_class carries the SQL error (Sequel::UniqueConstraintViolation)"
+    # (b) the failed tool's own writes are rolled back
+    assert_equal 0, conn[:claims].where(quest_id: tenancy[:quest_id]).count,
+                 "the savepoint rolled the tool's own writes back (L5 atomicity)"
+  end
 end

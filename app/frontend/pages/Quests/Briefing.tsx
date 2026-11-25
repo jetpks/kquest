@@ -176,6 +176,20 @@ export default function Briefing() {
           </section>
         )}
 
+        {p.unsent.length > 0 && (
+          <section data-testid="unsent-turns" className="space-y-1">
+            <h2 className="text-sm font-semibold text-muted-foreground">
+              Unsent — a closed session never consumes these; the next sign-off dead-letters
+              them
+            </h2>
+            {p.unsent.map((turn) => (
+              <p key={turn.id} className="text-sm text-muted-foreground">
+                #{turn.seq} · {turn.body}
+              </p>
+            ))}
+          </section>
+        )}
+
         <section data-testid="send-turn" className="space-y-2">
           <form method="post" action={`/quests/${p.quest.id}/briefing/turns`} className="space-y-2">
             <input type="hidden" name="_csrf_token" value={csrfToken()} />

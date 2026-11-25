@@ -38,18 +38,40 @@ class WebSearchTest < Minitest::Test
     assert_includes text, "web_calls=0/16"
   end
 
+  # The landed hard-mode test, rewritten to the FIXED mode source (I20 Part
+  # 5): the quest's process_config modes under the registry key
+  # quest.web_call_budget — the engine_config row mint is dead.
   def test_budget_refusal_byte_matched_hard_and_exhausted
-    conn[:quests].where(id: @quest_id).update(web_call_budget: 0)
-    conn[:engine_config].insert(key: "engine.web_call_budget", value: 0, mode: "hard",
-                                provenance: "test-minted budget line")
-    cfg = Kquest::Engine.config(conn)
-    tool = build_tool("web_search", config: cfg)
+    conn[:quests].where(id: @quest_id).update(
+      web_call_budget: 0,
+      process_config: Sequel.lit("?::jsonb",
+                                 JSON.generate("modes" => {"quest.web_call_budget" => "hard"}))
+    )
+    tool = build_tool("web_search")
 
     assert_refusal("web_search", "budget-exceeded",
                    slots: {line: "web_calls=0/0, mode=hard"}, planted: ["mode=hard"]) do
       execute_tool(tool, query: "fixture query")
     end
     assert @mock.captured_requests.empty?, "a hard+exhausted line refuses BEFORE the wire"
+  end
+
+  # The I20 named pin (AC7): the mode source is the QUEST's process_config
+  # modes (the registry key) — a hardened quest line refuses BEFORE the wire.
+  # RED before the fix (the mode source never resolved; the wire fired).
+  def test_hard_mode_from_the_quests_process_config_refuses_before_the_wire
+    conn[:quests].where(id: @quest_id).update(
+      web_call_budget: 0,
+      process_config: Sequel.lit("?::jsonb",
+                                 JSON.generate("modes" => {"quest.web_call_budget" => "hard"}))
+    )
+    tool = build_tool("web_search")
+
+    assert_refusal("web_search", "budget-exceeded",
+                   slots: {line: "web_calls=0/0, mode=hard"}, planted: ["mode=hard"]) do
+      execute_tool(tool, query: "fixture query")
+    end
+    assert @mock.captured_requests.empty?, "the quest's process_config mode refuses BEFORE the wire"
   end
 
   def test_missing_provider_config_is_a_loud_operational_error

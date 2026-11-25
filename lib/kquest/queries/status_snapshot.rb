@@ -37,9 +37,10 @@ module Kquest
       # The `quest_status` lines: the three budget lines are DERIVED (L10 —
       # the ledger is the counter, never a stored value):
       #   web_calls — the quest's tool_calls rows with tool IN
-      #               ('web_search','web_fetch') AND ok (each web call IS a
-      #               tool call — exact counting; a refused call made no wire
-      #               call and does not count);
+      #               ('web_search','web_fetch','agenda_stage') AND ok (each
+      #               web call IS a tool call — exact counting; a refused
+      #               call made no wire call and does not count; a wire fetch
+      #               is a web call — the I18 PH0-1 three-name predicate);
       #   tokens    — the quest's usage_events rollup vs quests.token_budget;
       #   spend_usd — the quest's usage_events cost rollup vs
       #               quests.spend_budget_usd.
@@ -52,7 +53,7 @@ module Kquest
                 .where(Sequel[:sessions][:id] => session_id).first
         web_used = @conn[:tool_calls]
                    .where(quest_id: quest_id, ok: true)
-                   .where(Sequel[:tool] => %w[web_search web_fetch]).count
+                   .where(Sequel[:tool] => %w[web_search web_fetch agenda_stage]).count
         tokens_used = @conn[:usage_events].where(quest_id: quest_id)
                                           .sum(Sequel.lit("input_tokens + output_tokens + " \
                                                           "cache_read_tokens + cache_write_tokens")) || 0
@@ -88,7 +89,7 @@ module Kquest
           phase: phase && "#{phase.fetch(:kind)}(#{phase.fetch(:round_no)}/#{phase.fetch(:attempt_no)})",
           writer: session && "session/#{session[:id].to_s[0, 4]}",
           web_used: conn[:tool_calls].where(quest_id: quest_id, ok: true)
-                                     .where(Sequel[:tool_calls][:tool] => %w[web_search web_fetch]).count,
+                                     .where(Sequel[:tool_calls][:tool] => %w[web_search web_fetch agenda_stage]).count,
           web_cap: quest.fetch(:web_call_budget),
           tokens_used: conn[:usage_events].where(quest_id: quest_id)
                                           .sum(Sequel.lit("input_tokens + output_tokens + " \

@@ -35,13 +35,13 @@ Async do
   sweep_registry = Kquest::Orchestrator::WorkerRegistry.new(redis: Kquest::App["redis"],
                                                             kind: "job")
   job_sweeper = Kquest::Orchestrator::JobSweeper.new(conn: sweep_conn, registry: sweep_registry)
-  sweep_registry.register!
   begin
     swept = job_sweeper.sweep
     Console.logger.info(self, "job sweep at boot: #{swept.inspect}")
   rescue StandardError => e
     Console.logger.error(self, "job sweep at boot failed: #{e.class}: #{e.message}")
   end
+  sweep_registry.register!
 
   periodic_sweep = Async do
     loop do

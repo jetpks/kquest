@@ -161,7 +161,11 @@ class TextsTest < Minitest::Test
 
   def test_loader_census_24_tools_50_refusal_sections
     assert_equal 24, Kquest::Tools::Texts.tool_names.size
-    assert_equal 50, Kquest::Tools::Texts.tool_names
+    # 51: the tool count is UNTOUCHED (24 — no new tool); the refusal count
+    # grew by ONE — report_draft's phase-not-synthesis (I20 Part 6, the I17
+    # MINOR's frozen teaching section). The I18 PH0-11 law-beats-enumeration
+    # class: the landed census flips with the law, the name is historical.
+    assert_equal 51, Kquest::Tools::Texts.tool_names
                           .sum { |n| Kquest::Tools::Texts.refusal_classes(n).size }
   end
 
