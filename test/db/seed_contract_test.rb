@@ -88,7 +88,7 @@ class SeedContractTest < Minitest::Test
     rows = conn[:tool_config].where(Sequel.like(:key, "ui.listing_cap.%"))
     surfaces = rows.select_map(:key).map { |k| k.delete_prefix("ui.listing_cap.") }
     assert_equal %w[alerts briefing briefing_transcript console costs dashboard frontier graph
-                    quest reports].sort,
+                    quest reports workspace_admin].sort,
                  surfaces.sort
     rows.each do |row|
       assert row[:num_value] && row[:num_value].positive?, "#{row[:key]} carries a numeric cap"
@@ -98,6 +98,8 @@ class SeedContractTest < Minitest::Test
                    "I18 (the chat transcript tail; L15)"
                  elsif row[:key].end_with?(".briefing")
                    "I17 Part 3"
+                 elsif row[:key].end_with?(".workspace_admin")
+                   "I19 (the dashboard's workspace-admin"
                  else
                    "I16 Part 0.2"
                  end

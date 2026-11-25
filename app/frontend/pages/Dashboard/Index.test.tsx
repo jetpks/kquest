@@ -54,7 +54,7 @@ describe('Dashboard/Index', () => {
         quests: { rows: [], requested: 0, cap: 50, existed: 0 },
         blind_spots: [],
         overhang: [],
-        workspaces: { workspaces: [], memberships: [], grants: [] },
+        workspaces: emptyWorkspaces(),
       },
     )
     const form = container.querySelector('form[data-testid="create-quest-form"]')
@@ -97,7 +97,7 @@ describe('Dashboard/Index', () => {
         },
         blind_spots: [],
         overhang: [],
-        workspaces: { workspaces: [], memberships: [], grants: [] },
+        workspaces: emptyWorkspaces(),
       },
     )
     expect(screen_text(container)).toContain('the frozen topic')
@@ -116,12 +116,143 @@ describe('Dashboard/Index', () => {
         },
         blind_spots: [],
         overhang: [{ surface: 'frontier', overhang: 40, capped_requests: 2 }],
-        workspaces: { workspaces: [], memberships: [], grants: [] },
+        workspaces: emptyWorkspaces(),
       },
     )
     expect(screen_text(container)).toContain('showing 1 of 80')
     expect(screen_text(container)).toContain('frontier: 40 over 2 capped request(s)')
   })
+
+  // ── I19: the workspace-admin section — the seven FORMS are the AC ──────
+
+  const listing = (rows: unknown[], requested = rows.length) => ({
+    rows, requested, cap: 50, existed: requested,
+  })
+
+  function emptyWorkspaces() {
+    return {
+      owned: listing([]),
+      members: listing([]),
+      memberships: listing([]),
+      grants: listing([]),
+    }
+  }
+
+  it('renders the seven workspace-admin forms — the write half of the I02 model (I19)', () => {
+    const { container } = renderPage(
+      { current_user: { id: 1, username: 'rooty', avatar_url: null } },
+      { workspaces: oneWorkspaceOneGrant() },
+    )
+    // 1. create-workspace-form → POST /workspaces, field name (+ the slug-law help).
+    const create = container.querySelector('form[data-testid="create-workspace-form"]')
+    expect(create).not.toBeNull()
+    expect(create!.getAttribute('method')).toBe('post')
+    expect(create!.getAttribute('action')).toBe('/workspaces')
+    for (const name of ['_csrf_token', 'name']) {
+      expect(create!.querySelector(`[name="${name}"]`), `field ${name}`).not.toBeNull()
+    }
+    expect(screen_text(container)).toContain('lowercase slug')
+
+    // 2-5. per owned-workspace card: rename / add-member / members-with-remove / grant.
+    const rename = container.querySelector('form[data-testid="workspace-rename-form"]')
+    expect(rename!.getAttribute('action')).toBe('/workspaces/ws-1/rename')
+    for (const name of ['_csrf_token', 'name']) {
+      expect(rename!.querySelector(`[name="${name}"]`), `field ${name}`).not.toBeNull()
+    }
+    const add = container.querySelector('form[data-testid="add-member-form"]')
+    expect(add!.getAttribute('action')).toBe('/workspaces/ws-1/members')
+    for (const name of ['_csrf_token', 'handle']) {
+      expect(add!.querySelector(`[name="${name}"]`), `field ${name}`).not.toBeNull()
+    }
+    const remove = container.querySelector('form[data-testid="remove-member-form"]')
+    expect(remove!.getAttribute('action')).toBe('/workspaces/ws-1/members/remove')
+    for (const name of ['_csrf_token', 'handle']) {
+      expect(remove!.querySelector(`[name="${name}"]`), `field ${name}`).not.toBeNull()
+    }
+    expect(remove!.querySelector('[name="handle"]')!.getAttribute('type')).toBe('hidden')
+    const wsGrant = container.querySelector('form[data-testid="workspace-grant-form"]')
+    expect(wsGrant!.getAttribute('action')).toBe('/workspaces/ws-1/grants')
+    for (const name of ['_csrf_token', 'source_urn', 'note']) {
+      expect(wsGrant!.querySelector(`[name="${name}"]`), `field ${name}`).not.toBeNull()
+    }
+
+    // 6. section-global public-grant-form → POST /grants/public.
+    const pub = container.querySelector('form[data-testid="public-grant-form"]')
+    expect(pub).not.toBeNull()
+    expect(pub!.getAttribute('action')).toBe('/grants/public')
+    for (const name of ['_csrf_token', 'source_urn', 'note']) {
+      expect(pub!.querySelector(`[name="${name}"]`), `field ${name}`).not.toBeNull()
+    }
+
+    // 7. per grant row: revoke-grant-form (csrf only) → POST /grants/:id/revoke.
+    const revoke = container.querySelector('form[data-testid="revoke-grant-form"]')
+    expect(revoke).not.toBeNull()
+    expect(revoke!.getAttribute('action')).toBe('/grants/g-pub/revoke')
+    expect(revoke!.querySelector('[name="_csrf_token"]')).not.toBeNull()
+  })
+
+  it('renders the grant rows\u2019 scope, note, and granted_at — and the memberships list', () => {
+    const { container } = renderPage(
+      { current_user: { id: 1, username: 'rooty', avatar_url: null } },
+      { workspaces: oneWorkspaceOneGrant() },
+    )
+    expect(screen_text(container)).toContain('kb:src:publicurn')
+    expect(screen_text(container)).toContain('public')
+    expect(screen_text(container)).toContain('shared with gh-mate')
+    expect(screen_text(container)).toContain('note: the public note')
+    expect(screen_text(container)).toContain('granted 2026-11-25T01:00:00Z')
+    expect(screen_text(container)).toContain('member of ws-1')
+  })
+
+  it('surfaces the workspace-admin cap honesty ("showing N of M" per list)', () => {
+    const w = oneWorkspaceOneGrant()
+    // ShowingOf renders only when requested EXCEEDS the cap (never silent
+    // truncation): the grants list came back capped at 2 of 5 issued.
+    w.grants = { rows: w.grants.rows, requested: 5, cap: 2, existed: 5 }
+    const { container } = renderPage(
+      { current_user: { id: 1, username: 'rooty', avatar_url: null } },
+      { workspaces: w },
+    )
+    expect(screen_text(container)).toContain('showing 2 of 5')
+  })
+
+  it('replaces the stale render-only line — the admin UI is HERE now (I19)', () => {
+    const { container } = renderPage(
+      { current_user: { id: 1, username: 'rooty', avatar_url: null } },
+      { workspaces: emptyWorkspaces() },
+    )
+    expect(screen_text(container)).not.toContain('admin UI is I17')
+    expect(screen_text(container)).toContain('No workspaces yet')
+  })
+
+  function oneWorkspaceOneGrant() {
+    return {
+      owned: listing([{ id: 'ws-1', name: 'ws-1', created_at: '2026-11-25T00:00:00Z' }]),
+      members: listing([
+        {
+          workspace_id: 'ws-1', workspace_name: 'ws-1', user_id: 'u2',
+          handle: 'gh-mate', joined_at: '2026-11-25T00:30:00Z',
+        },
+      ]),
+      memberships: listing([
+        { workspace_id: 'ws-1', workspace_name: 'ws-1', joined_at: '2026-11-25T00:00:00Z' },
+      ]),
+      grants: listing([
+        {
+          id: 'g-pub', source_id: 's1', source_urn: 'kb:src:publicurn',
+          source_title: 'The Public Source', grantee_user_id: null, grantee_handle: null,
+          grantee_workspace_id: null, workspace_name: null, is_public: true,
+          note: 'the public note', granted_at: '2026-11-25T01:00:00Z',
+        },
+        {
+          id: 'g-user', source_id: 's2', source_urn: 'kb:src:sharedurn',
+          source_title: null, grantee_user_id: 'u2', grantee_handle: 'gh-mate',
+          grantee_workspace_id: null, workspace_name: null, is_public: false,
+          note: null, granted_at: '2026-11-25T00:45:00Z',
+        },
+      ]),
+    }
+  }
 
   function screen_text(container: HTMLElement) {
     return container.textContent ?? ''

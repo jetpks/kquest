@@ -38,7 +38,8 @@ module Kquest
       # teardowns wipe tool_config) still carries the L15 cap law.
       DEFAULT_CAPS = {
         "dashboard" => 50, "quest" => 50, "frontier" => 50, "graph" => 50,
-        "reports" => 50, "costs" => 100, "alerts" => 20
+        "reports" => 50, "costs" => 100, "alerts" => 20,
+        "workspace_admin" => 50
       }.freeze
 
       # The cap from config (the I15 lane-authored-constants precedent:
