@@ -205,4 +205,71 @@ class OperatorWriteTest < Minitest::Test
     assert_equal 2, conn[:phases].where(quest_id: @tenancy[:quest_id]).count,
                  "no extra phase was minted"
   end
+
+  # ── the enqueue door (I18 Spec Part 2.1 / AC6) ─────────────────────────
+
+  def test_enqueue_turn_inserts_one_enqueued_row_with_the_per_session_seq
+    session = Kquest::Ui::OperatorWrite.open_session!(conn, user: user, quest: quest)
+    first = Kquest::Ui::OperatorWrite.enqueue_turn!(conn, session: session, body: "what is the scope?")
+    second = Kquest::Ui::OperatorWrite.enqueue_turn!(conn, session: session, body: "  padded  ")
+    assert_equal 1, first
+    assert_equal 2, second, "the seq is per-session max+1 (the record_tool_call! pattern)"
+    rows = conn[:briefing_turns].where(session_id: session.fetch(:id)).order(:seq).to_a
+    assert_equal 2, rows.size
+    assert_equal [1, 2], rows.map { |r| r[:seq] }
+    assert_equal ["what is the scope?", "padded"], rows.map { |r| r[:body] }
+    assert rows.all? { |r| r[:state] == "enqueued" }
+    assert_nil rows.first[:consumed_at]
+    assert_equal @tenancy[:user_id], rows.first[:user_id]
+    assert_equal @tenancy[:quest_id], rows.first[:quest_id]
+  end
+
+  def test_enqueue_turn_refuses_a_blank_body_teaching_with_no_row
+    session = Kquest::Ui::OperatorWrite.open_session!(conn, user: user, quest: quest)
+    ["", "   ", nil].each do |blank|
+      error = assert_raises(Kquest::Engine::Error) do
+        Kquest::Ui::OperatorWrite.enqueue_turn!(conn, session: session, body: blank)
+      end
+      assert_match(/empty/, error.message, "the refusal teaches")
+    end
+    assert_empty conn[:briefing_turns].where(session_id: session.fetch(:id)).to_a,
+                 "the refusal precedes any insert (the CHECK law taught, never tripped)"
+  end
+
+  def test_end_session_marks_still_enqueued_turns_skipped
+    session = Kquest::Ui::OperatorWrite.open_session!(conn, user: user, quest: quest)
+    Kquest::Ui::OperatorWrite.enqueue_turn!(conn, session: session, body: "first")
+    Kquest::Ui::OperatorWrite.enqueue_turn!(conn, session: session, body: "second")
+    Kquest::Ui::OperatorWrite.end_session!(conn, quest_id: @tenancy[:quest_id])
+    states = conn[:briefing_turns].where(session_id: session.fetch(:id)).order(:seq).select_map(:state)
+    assert_equal %w[skipped skipped], states,
+                 "the dead-letter mark: an ended session never consumes — never silently dropped"
+  end
+
+  def test_the_dead_letter_mark_covers_a_governor_banked_sessions_leftover_turns
+    # Carry-forward (a) / lane 1 PH0-10: the governor's loud path banks the
+    # operator session THROUGH bank_session! (ended_at stamped, the engine's
+    # own law) — end_session! never ran, so the session's still-enqueued
+    # turns stay enqueued and can never be consumed (the row is closed; the
+    # runner's branch serves OPEN sessions only). The dead-letter mark keys
+    # the QUEST's operator sessions, so the NEXT sign-off reaches them.
+    banked = Kquest::Ui::OperatorWrite.open_session!(conn, user: user, quest: quest)
+    Kquest::Ui::OperatorWrite.enqueue_turn!(conn, session: banked, body: "written before the bank")
+    Kquest::Engine::SessionSupervisor.new(conn: conn)
+                                     .bank_session!(session_id: banked.fetch(:id))
+    assert_equal "enqueued", conn[:briefing_turns]
+                                  .where(session_id: banked.fetch(:id)).get(:state),
+                 "the bank is the engine's law — the mark is end_session!'s"
+
+    # The operator returns: a NEW session, one fresh turn, then the sign-off.
+    reopened = Kquest::Ui::OperatorWrite.open_session!(conn, user: user, quest: quest)
+    refute_equal banked.fetch(:id), reopened.fetch(:id)
+    Kquest::Ui::OperatorWrite.enqueue_turn!(conn, session: reopened, body: "written after the bank")
+    Kquest::Ui::OperatorWrite.end_session!(conn, quest_id: @tenancy[:quest_id])
+    by_session = conn[:briefing_turns].to_a.group_by { |r| r[:session_id] }
+    assert_equal %w[skipped], by_session.fetch(banked.fetch(:id)).map { |r| r[:state] },
+                 "the BANKED session's leftover turn dead-letters at the next sign-off"
+    assert_equal %w[skipped], by_session.fetch(reopened.fetch(:id)).map { |r| r[:state] },
+                 "the open session's own turn dead-letters too — ONE UPDATE, same door"
+  end
 end

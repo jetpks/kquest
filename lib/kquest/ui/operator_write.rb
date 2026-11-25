@@ -16,8 +16,11 @@ module Kquest
     # supervisor's own write_guard_for(session). The only sessions write in
     # the UI is the ended_at stamp (end_session!, through the supervisor's
     # bank_session!), and the only phases write is the briefing round-1 mint
-    # (open_session!, I01 DR-13) — the questions result merge lives in the
-    # briefing questions action (I17 Part 3).
+    # (open_session!, I01 DR-13). The I18 chat (the §8 amendment): the topic
+    # questions are the AGENT's write (the topic_questions tool, worker side)
+    # — this module adds the operator-turn ENQUEUE door (enqueue_turn!, the
+    # ONLY [:briefing_turns] writer in the web tree) and the dead-letter mark
+    # on sign-off (end_session!).
     module OperatorWrite
       # The supervisor is constructed per call over the shared conn (the
       # liveness registry is the supervisor's own class-level default).
@@ -139,10 +142,42 @@ module Kquest
         nil
       end
 
+      # ENQUEUE one operator chat turn (I18 the §8 amendment; Spec Part 2.1):
+      # ONE [:briefing_turns] insert (state `enqueued`) with the per-session
+      # `seq` (max+1 — the record_tool_call! pattern). The ONLY briefing_turns
+      # writer in the web tree; NO provider machinery, no spawn, no publish
+      # (BRIEF §3 zero-auto — the row IS the operator turn's durable record;
+      # the WORKER consumes and executes). A blank body refuses teaching
+      # BEFORE the insert (the CHECK law taught as a 422-class refusal the
+      # action renders; ck_briefing_turns_body_nonempty is the backstop).
+      def enqueue_turn!(conn, session:, body:)
+        text = body.to_s.strip
+        if text.empty?
+          raise Kquest::Engine::Error,
+                "the message is empty — write the operator turn you want the agent to " \
+                "address; an empty message teaches, it never enqueues"
+        end
+        seq = conn[:briefing_turns].where(session_id: session.fetch(:id)).max(:seq).to_i + 1
+        conn[:briefing_turns].insert(
+          user_id: session.fetch(:user_id), quest_id: session.fetch(:quest_id),
+          session_id: session.fetch(:id), seq: seq, body: text
+        )
+        seq
+      end
+
       # Stamps `ended_at` on the open operator session — the DR-04 sign-off /
       # the console attach end. Raises the teaching refusal when none is open
       # (the action renders 422). The stamp rides the supervisor's own
       # bank_session! (ended_at + the liveness release — one landed writer).
+      # The DEAD-LETTER MARK (I18 Spec Part 2.1 + the banked-session edge,
+      # PH0-CU-1): the quest's operator sessions' still-`enqueued` turns flip
+      # `skipped` — ONE UPDATE, same door. Keyed to the QUEST's operator
+      # sessions (not just the one being ended) because a governor-banked
+      # session (the engine's own bank_session! path) closes the row WITHOUT
+      # this door, and its leftover enqueued turns can never be consumed
+      # afterwards; the next sign-off is the only lawful door that reaches
+      # them. An ended session never consumes; the page shows the turns
+      # unsent, never silently dropped.
       def end_session!(conn, quest_id:)
         session = current_session(conn, quest_id: quest_id)
         unless session
@@ -151,6 +186,11 @@ module Kquest
                 "briefing session (open one first)"
         end
         supervisor(conn).bank_session!(session_id: session.fetch(:id))
+        conn[:briefing_turns]
+          .where(session_id: conn[:sessions].where(quest_id: quest_id,
+                                                   driver: "operator").select(:id),
+                 state: "enqueued")
+          .update(state: "skipped")
         session
       end
 
