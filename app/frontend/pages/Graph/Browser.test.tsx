@@ -59,7 +59,7 @@ describe('Graph/Browser', () => {
     expect(text).toContain('Ledger a conflict')
     const ledger = container.querySelector('[data-testid="conflict-ledger-form"]')!
     expect(ledger.getAttribute('action')).toBe('/quests//graph/conflicts')
-    expect(ledger.querySelector('input[name="authenticity_token"]')).not.toBeNull()
+    expect(ledger.querySelector('input[name="_csrf_token"]')).not.toBeNull()
     for (const name of ['claim_id', 'divergence', 'hypothesis', 'source_urns[]']) {
       expect(ledger.querySelector(`input[name="${name}"]`)).not.toBeNull()
     }

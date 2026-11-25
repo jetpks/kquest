@@ -36,7 +36,7 @@ module Kquest
             process_config: Sequel.lit("?::jsonb", JSON.generate(process_config))
           )
           redirect_with_flash(res, "/quests/#{quest_id}",
-                              notice: "Quest created (row only) — the briefing is I17's console.")
+                              notice: "Quest created — next: run the interactive briefing to launch the worker.")
         end
 
         private

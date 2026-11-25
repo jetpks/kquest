@@ -50,6 +50,17 @@ function renderPage(page: Partial<typeof base> = {}) {
 }
 
 describe('Quests/Show', () => {
+  it('surfaces the briefing CTA while the quest is unbrieft and retires it once a session exists', () => {
+    // The next-door card (operator-caught: "now i can't tell what to do"):
+    // fresh quest = row only; the briefing is the door to everything.
+    const empty = renderPage({ sessions: { rows: [], requested: 0, cap: 50, existed: 0 } })
+    const cta = empty.container.querySelector('[data-testid="briefing-cta"]')
+    expect(cta).not.toBeNull()
+    expect(cta!.querySelector('a')!.getAttribute('href')).toBe('/quests/q1/briefing')
+
+    const briefed = renderPage() // base props carry one session row
+    expect(briefed.container.querySelector('[data-testid="briefing-cta"]')).toBeNull()
+  })
   it('echoes the parity block byte-faithfully (composed through the shared formatter server-side)', () => {
     const { container } = renderPage()
     expect(container.textContent).toContain(base.parity_line)
@@ -81,7 +92,7 @@ describe('Quests/Show', () => {
     expect(forms.map((f) => f.getAttribute('action'))).toEqual([
       '/quests/q1/pause', '/quests/q1/resume', '/quests/q1/archive',
     ])
-    expect(forms[0].querySelector('input[name="authenticity_token"]')).not.toBeNull()
+    expect(forms[0].querySelector('input[name="_csrf_token"]')).not.toBeNull()
     const hrefs = Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'))
     expect(hrefs).toContain('/quests/q1/console')
     expect(hrefs).toContain('/quests/q1/briefing')

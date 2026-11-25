@@ -155,16 +155,21 @@ module Kquest
       [302, {"location" => "/auth/failure?message=#{msg}", "content-type" => "text/html", "content-length" => "0"}, []]
     end
 
-    # Request-phase CSRF for OmniAuth. The SPA sign-in form (Nav.tsx) submits Hanami's own
-    # `_csrf_token` (read from the XSRF-TOKEN cookie) as `authenticity_token`. Validate the
-    # request phase against THAT session token — one CSRF token shared by Hanami actions and
-    # OmniAuth — mirroring the Rails oracle's single token (omniauth-rails_csrf_protection).
-    # (Replaces OmniAuth's default rack-protection AuthenticityToken, which checks a separate
-    # `:csrf` session key the frontend never sends.) Raises AuthenticityError → on_failure.
+    # Request-phase CSRF for OmniAuth. The SPA forms submit Hanami's own
+    # `_csrf_token` (read from the XSRF-TOKEN cookie) — ONE wire name, the
+    # framework's own, shared by every form AND this bridge: the token is
+    # the session CSRF token either way. (2026-11-24: the frontend briefly
+    # used the Rails-convention `authenticity_token`, which worked for this
+    # OmniAuth bridge but not for Hanami actions — renamed app-wide to the
+    # native param rather than aliasing two names.) Validate the request
+    # phase against THAT session token — mirroring the Rails oracle's single
+    # token (omniauth-rails_csrf_protection). (Replaces OmniAuth's default
+    # rack-protection AuthenticityToken, which checks a separate `:csrf`
+    # session key the frontend never sends.) Raises AuthenticityError → on_failure.
     OmniAuth.config.request_validation_phase = lambda do |env|
       session = env["rack.session"] || {}
       expected = (session[:_csrf_token] || session["_csrf_token"]).to_s
-      submitted = (Rack::Request.new(env).params["authenticity_token"] || env["HTTP_X_CSRF_TOKEN"]).to_s
+      submitted = (Rack::Request.new(env).params["_csrf_token"] || env["HTTP_X_CSRF_TOKEN"]).to_s
 
       unless !expected.empty? && !submitted.empty? && Rack::Utils.secure_compare(expected, submitted)
         raise OmniAuth::AuthenticityError, "invalid authenticity token"

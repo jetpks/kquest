@@ -116,7 +116,7 @@ export default function Browser() {
                 <form method="post"
                       action={`/quests/${questId}/graph/conflicts/${c.id}/hypothesis`}
                       className="flex gap-2">
-                  <input type="hidden" name="authenticity_token" value={csrfToken()} />
+                  <input type="hidden" name="_csrf_token" value={csrfToken()} />
                   <input name="hypothesis" placeholder="the resolution hypothesis (non-empty)"
                          className="w-80 rounded border px-2 py-1 text-sm" />
                   <button type="submit" className="rounded border px-2 py-1 text-sm">
@@ -131,7 +131,7 @@ export default function Browser() {
                 action={`/quests/${questId}/graph/conflicts`}
                 className="mt-2 space-y-2 rounded border p-3 text-sm">
             <div className="font-medium">Ledger a conflict (the courtroom's first act)</div>
-            <input type="hidden" name="authenticity_token" value={csrfToken()} />
+            <input type="hidden" name="_csrf_token" value={csrfToken()} />
             <input name="claim_id" placeholder="the claim id"
                    className="w-80 rounded border px-2 py-1 text-sm" />
             <input name="divergence" placeholder="the divergence (non-empty)"

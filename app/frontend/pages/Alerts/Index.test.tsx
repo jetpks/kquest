@@ -62,12 +62,12 @@ describe('Alerts/Index', () => {
     const ack = container.querySelector('form')!
     expect(ack.getAttribute('action')).toBe('/alerts/acknowledge')
     expect(ack.querySelector('input[name="predicate"]')!.getAttribute('value')).toBe('tw_wedge')
-    expect(ack.querySelector('input[name="authenticity_token"]')).not.toBeNull()
+    expect(ack.querySelector('input[name="_csrf_token"]')).not.toBeNull()
     // the I17 additions: the mute/unmute control POSTs the console's mute
     // route (the ONE config-row write, per quest from the quests listing)
     const mute = container.querySelector('[data-testid="mute-control-q1"]')!
     expect(mute.getAttribute('action')).toBe('/quests/q1/console/mute')
-    expect(mute.querySelector('input[name="authenticity_token"]')).not.toBeNull()
+    expect(mute.querySelector('input[name="_csrf_token"]')).not.toBeNull()
     expect(mute.querySelector('button[name="remove"][value="true"]')).not.toBeNull()
   })
 

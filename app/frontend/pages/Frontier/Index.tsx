@@ -55,7 +55,7 @@ export default function Index() {
         <section data-testid="hand-add-form" className="space-y-2">
           <h2 className="text-lg font-semibold">Hand-add a frontier entry</h2>
           <form method="post" action={`/quests/${questId}/frontier/add`} className="space-y-2 text-sm">
-            <input type="hidden" name="authenticity_token" value={csrfToken()} />
+            <input type="hidden" name="_csrf_token" value={csrfToken()} />
             <input name="claim" placeholder="the claim (K-alias or urn)" className="rounded border px-2 py-1 text-sm" />
             <input name="need" placeholder="the need — names the underlying study (authors, year, venue)"
                    className="w-96 rounded border px-2 py-1 text-sm" />

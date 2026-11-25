@@ -9,14 +9,17 @@ import {
 import AppLayout from '@/layouts/AppLayout'
 import EventFeed from '@/components/EventFeed'
 import ShowingOf from '@/components/ShowingOf'
+import { csrfToken } from '@/lib/csrf'
 import { CappedListing, MetricsFamily, OverhangRow, QuestRow, SharedProps } from '@/types'
 
 // The DASHBOARD (I08 §4 row 1 / I16 Part 3) — the root landing surface.
 // Anonymous: the 200 sign-in prompt card (the Nav's GitHub button is the only
-// auth door — a redirect here would loop). Signed-in: quest cards (capped),
-// the blind-spot panel (Metrics families + the overhang join), the
-// honesty-bounds ladder (static text, I07 §1's guarantee map), and
-// workspace-admin reads (render-only; the grant UI is I17's).
+// auth door — a redirect here would loop). Signed-in: the ONE write — the
+// pre-briefing create-quest form (topic + budgets + routing map; the ROW
+// ONLY) — then quest cards (capped), the blind-spot panel (Metrics families
+// + the overhang join), the honesty-bounds ladder (static text, I07 §1's
+// guarantee map), and workspace-admin reads (render-only; the grant UI is
+// I17's).
 export type DashboardProps = {
   quests?: CappedListing<QuestRow>
   blind_spots?: MetricsFamily[]
@@ -60,6 +63,61 @@ export default function Index() {
           </Card>
         ) : (
           <>
+            <section data-testid="create-quest" className="space-y-2">
+              <h2 className="text-lg font-semibold">New quest</h2>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">the pre-briefing form</CardTitle>
+                  <CardDescription className="text-xs">
+                    creates the row only — no session, no worker; the
+                    interactive briefing is the next door after create
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* I16 Part 3's ONE dashboard write — the form the shipped
+                      page omitted (operator-caught build miss, fixed inline
+                      2026-11-24): topic + budgets + the routing map, exactly
+                      the server action's own vocabulary. */}
+                  <form data-testid="create-quest-form" method="post" action="/quests" className="space-y-2">
+                    <input type="hidden" name="_csrf_token" value={csrfToken()} />
+                    <input name="topic" required placeholder="topic — what this quest is after"
+                           className="w-full rounded border px-2 py-1 text-sm" />
+                    <fieldset className="space-y-1">
+                      <legend data-testid="budget-semantics" className="text-xs text-muted-foreground">
+                        whole-quest lifetime caps — when one is hit the quest pauses;
+                        the console&rsquo;s resume door can only raise them, never lower
+                      </legend>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <input name="web_call_budget" type="number" min="0" placeholder="web calls, e.g. 40"
+                               className="rounded border px-2 py-1 text-sm" />
+                        <input name="token_budget" type="number" min="0" placeholder="tokens, e.g. 200000"
+                               className="rounded border px-2 py-1 text-sm" />
+                        <input name="spend_budget_usd" placeholder="US$ e.g. 2.50"
+                               className="rounded border px-2 py-1 text-sm" />
+                      </div>
+                    </fieldset>
+                    <details data-testid="advanced-routing" className="space-y-2 rounded border p-2">
+                      <summary className="cursor-pointer text-sm text-muted-foreground">
+                        Advanced routing — optional; blank uses the engine&rsquo;s configured defaults
+                      </summary>
+                      <p className="text-xs text-muted-foreground">
+                        model_config routes a phase kind to a configured model — keys:
+                        decompose · frontier-build · descent · synthesis · verification
+                      </p>
+                      <input name="model_config" placeholder='e.g. {"synthesis": "<a configured model id>"}'
+                             className="w-full rounded border px-2 py-1 text-sm" />
+                      <p className="text-xs text-muted-foreground">
+                        {'process_config sets process knobs — e.g. {"modes": {…}} advisory toggles, {"overlays": "quest-local law text"}'}
+                      </p>
+                      <input name="process_config" placeholder='e.g. {"modes": {"verification": true}}'
+                             className="w-full rounded border px-2 py-1 text-sm" />
+                    </details>
+                    <button type="submit" className="rounded border px-2 py-1 text-sm">Create quest</button>
+                  </form>
+                </CardContent>
+              </Card>
+            </section>
+
             <section data-testid="quest-cards" className="space-y-2">
               <h2 className="text-lg font-semibold">Quests</h2>
               {props.quests && props.quests.rows.length === 0 && (

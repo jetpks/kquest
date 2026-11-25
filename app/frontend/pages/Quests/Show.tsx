@@ -58,6 +58,30 @@ export default function Show() {
           </p>
         </section>
 
+        {/* The next-door card (operator-caught 2026-11-24): a fresh quest
+            is a ROW ONLY — no session, no worker — and the briefing is the
+            door to everything (I06 §8: agenda + questions through the launch
+            gate, worker boot). Until a session exists this card is the
+            page's headline action; it retires itself the moment one does. */}
+        {p.sessions.rows.length === 0 && p.quest.state === 'active' && (
+          <Card data-testid="briefing-cta">
+            <CardHeader>
+              <CardTitle className="text-sm">next: the interactive briefing</CardTitle>
+              <CardDescription className="text-xs">
+                this quest is a row only — no session, no worker yet. the
+                briefing sets the agenda + your questions and launches the
+                worker through the launch gate.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <a href={`/quests/${p.quest.id}/briefing`}
+                 className="inline-block rounded border px-3 py-1.5 text-sm underline">
+                Run the briefing →
+              </a>
+            </CardContent>
+          </Card>
+        )}
+
         <Card data-testid="parity-block">
           <CardHeader>
             <CardTitle className="text-sm">Parity block</CardTitle>
@@ -179,7 +203,7 @@ function LifecycleButton({ questId, action, label, disabled }: {
 }) {
   return (
     <form method="post" action={`/quests/${questId}/${action}`} className="inline">
-      <input type="hidden" name="authenticity_token" value={csrfToken()} />
+      <input type="hidden" name="_csrf_token" value={csrfToken()} />
       <button type="submit" disabled={disabled}
               className="rounded border px-2 py-1 text-sm disabled:opacity-40">
         {label}

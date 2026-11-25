@@ -144,7 +144,7 @@ function AckForm({ predicate }: { predicate: string }) {
   return (
     <form method="post" action="/alerts/acknowledge" className="inline">
       <input type="hidden" name="predicate" value={predicate} />
-      <input type="hidden" name="authenticity_token" value={csrfToken()} />
+      <input type="hidden" name="_csrf_token" value={csrfToken()} />
       <button type="submit" className="rounded border px-2 py-0.5">acknowledge</button>
     </form>
   )
@@ -164,7 +164,7 @@ function MuteControl({ questId, topic }: { questId: string; topic: string }) {
           action={`/quests/${questId}/console/mute`}
           className="flex flex-wrap items-center gap-1 text-xs">
       <span className="font-mono">{topic.slice(0, 24)}</span>
-      <input type="hidden" name="authenticity_token" value={csrfToken()} />
+      <input type="hidden" name="_csrf_token" value={csrfToken()} />
       <select name="predicate" className="rounded border px-1 py-0.5 text-xs">
         <option value="">predicate…</option>
         {predicates.map((predicate) => (
