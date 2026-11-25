@@ -43,6 +43,39 @@ describe('Dashboard/Index', () => {
     expect(screen_text(container)).toContain('Sign in')
   })
 
+  it('renders the pre-briefing create-quest form — the ONE dashboard write (I16 Part 3)', () => {
+    // The operator-caught build miss (fixed inline 2026-11-24): the shipped
+    // page had the route + server action but NO form. The standing lesson —
+    // an affordance is pinned as a FORM (action + named fields), never just
+    // a route.
+    const { container } = renderPage(
+      { current_user: { id: 1, username: 'rooty', avatar_url: null } },
+      {
+        quests: { rows: [], requested: 0, cap: 50, existed: 0 },
+        blind_spots: [],
+        overhang: [],
+        workspaces: { workspaces: [], memberships: [], grants: [] },
+      },
+    )
+    const form = container.querySelector('form[data-testid="create-quest-form"]')
+    expect(form).not.toBeNull()
+    expect(form!.getAttribute('method')).toBe('post')
+    expect(form!.getAttribute('action')).toBe('/quests')
+    for (const name of [
+      'authenticity_token', 'topic', 'web_call_budget', 'token_budget',
+      'spend_budget_usd', 'process_config', 'model_config',
+    ]) {
+      expect(form!.querySelector(`[name="${name}"]`), `field ${name}`).not.toBeNull()
+    }
+    expect(form!.querySelector('[name="topic"]')!.hasAttribute('required')).toBe(true)
+    expect(screen_text(container)).toContain('No quests yet.')
+  })
+
+  it('keeps the create form off the anonymous card — login is the only anonymous door', () => {
+    const { container } = renderPage({ current_user: null })
+    expect(container.querySelector('form[action="/quests"]')).toBeNull()
+  })
+
   it('carries the anonymous shared props as a 200 sign-in prompt card', () => {
     const { container } = renderPage({ current_user: null })
     expect(screen_text(container)).toContain('Sign in with the GitHub button above')
