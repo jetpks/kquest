@@ -14,6 +14,9 @@ export type User = {
 export type SharedProps = {
   current_user: User | null
   flash: FlashData
+  // Enabled OAuth providers (settings.oauth_providers) — Nav renders one
+  // sign-in door per provider; absent = the github-only default.
+  oauth_providers?: string[]
 }
 
 // ── the read surfaces' page-local prop vocabulary (I16 Parts 1–9) ──────────

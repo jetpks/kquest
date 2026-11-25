@@ -12,7 +12,8 @@ import { csrfToken } from '@/lib/csrf'
 import type { SharedProps } from '@/types'
 
 export default function Nav() {
-  const { current_user } = usePage<SharedProps>().props
+  const { current_user, oauth_providers } = usePage<SharedProps>().props
+  const providers = oauth_providers ?? ['github']
 
   return (
     <header className="border-b-2 border-primary bg-sidebar text-sidebar-foreground">
@@ -48,13 +49,27 @@ export default function Nav() {
           ) : (
             // Native full-page POST — NOT Inertia. The OmniAuth request phase
             // requires POST + CSRF, and the browser must follow the cross-origin
-            // 302 to the provider (an Inertia XHR cannot).
-            <form action="/auth/github" method="post">
-              <input type="hidden" name="authenticity_token" value={csrfToken()} />
-              <Button type="submit" size="sm">
-                <LogIn className="size-4" /> Sign in with GitHub
-              </Button>
-            </form>
+            // 302 to the provider (an Inertia XHR cannot). One door per enabled
+            // provider (shared props) — github by default, `developer` (the
+            // dev-only form strategy) when enabled via OAUTH_PROVIDERS.
+            <>
+              {providers.includes('github') && (
+                <form action="/auth/github" method="post">
+                  <input type="hidden" name="authenticity_token" value={csrfToken()} />
+                  <Button type="submit" size="sm">
+                    <LogIn className="size-4" /> Sign in with GitHub
+                  </Button>
+                </form>
+              )}
+              {providers.includes('developer') && (
+                <form action="/auth/developer" method="post">
+                  <input type="hidden" name="authenticity_token" value={csrfToken()} />
+                  <Button type="submit" size="sm" variant="outline">
+                    <LogIn className="size-4" /> Dev sign-in
+                  </Button>
+                </form>
+              )}
+            </>
           )}
         </nav>
       </div>
