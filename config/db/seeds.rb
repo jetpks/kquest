@@ -260,7 +260,11 @@ UI_LISTING_CAPS = {
   "ui.listing_cap.briefing"  => [30, "I17 Part 3 (the briefing's agenda list; staged docs per session run short)"],
   # The I18 chat transcript tail (the reader's cap; L15 — the omitted count
   # is honest):
-  "ui.listing_cap.briefing_transcript" => [200, "I18 (the chat transcript tail; L15)"]
+  "ui.listing_cap.briefing_transcript" => [200, "I18 (the chat transcript tail; L15)"],
+  # The I19 dashboard workspace-admin section's FOUR lists ride the ONE
+  # surface (the console precedent; L15):
+  "ui.listing_cap.workspace_admin" => [50, "I19 (the dashboard's workspace-admin section lists; " \
+                                            "one screen's worth per surface — the console precedent)"]
 }.freeze
 
 conn.transaction do
