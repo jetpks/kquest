@@ -179,7 +179,7 @@ function LifecycleButton({ questId, action, label, disabled }: {
 }) {
   return (
     <form method="post" action={`/quests/${questId}/${action}`} className="inline">
-      <input type="hidden" name="authenticity_token" value={csrfToken()} />
+      <input type="hidden" name="_csrf_token" value={csrfToken()} />
       <button type="submit" disabled={disabled}
               className="rounded border px-2 py-1 text-sm disabled:opacity-40">
         {label}

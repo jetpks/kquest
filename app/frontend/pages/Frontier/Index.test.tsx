@@ -50,7 +50,7 @@ describe('Frontier/Index', () => {
     const { container } = renderPage()
     const form = container.querySelector('[data-testid="hand-add-form"] form')!
     expect(form.getAttribute('action')).toBe('/quests//frontier/add')
-    expect(form.querySelector('input[name="authenticity_token"]')).not.toBeNull()
+    expect(form.querySelector('input[name="_csrf_token"]')).not.toBeNull()
     for (const name of ['claim', 'need', 'uncertainty', 'relevance']) {
       expect(form.querySelector(`input[name="${name}"]`)).not.toBeNull()
     }

@@ -77,7 +77,7 @@ export default function Show() {
                 <form method="post"
                       action={`/quests/${questId}/report/versions/${v.version_seq}/flip`}
                       className="ml-2 inline">
-                  <input type="hidden" name="authenticity_token" value={csrfToken()} />
+                  <input type="hidden" name="_csrf_token" value={csrfToken()} />
                   <button type="submit" className="rounded border px-1 py-0.5 text-xs">
                     flip standing here
                   </button>
@@ -89,7 +89,7 @@ export default function Show() {
           <form data-testid="draft-form" method="post" action={`/quests/${questId}/report/draft`}
                 className="mt-2 space-y-2 rounded border p-3 text-sm">
             <div className="font-medium">Draft a section (the session's draft version)</div>
-            <input type="hidden" name="authenticity_token" value={csrfToken()} />
+            <input type="hidden" name="_csrf_token" value={csrfToken()} />
             <input name="section" placeholder="the section key" className="rounded border px-2 py-1 text-sm" />
             <input name="version" placeholder="target version_seq (optional — the draft accumulates)"
                    className="w-80 rounded border px-2 py-1 text-sm" />
@@ -99,7 +99,7 @@ export default function Show() {
           </form>
           <form data-testid="bind-form" method="post" action={`/quests/${questId}/report/bind`}
                 className="mt-2 text-sm">
-            <input type="hidden" name="authenticity_token" value={csrfToken()} />
+            <input type="hidden" name="_csrf_token" value={csrfToken()} />
             <button type="submit" className="rounded border px-2 py-1 text-sm">
               Bind (the deterministic pass: citations → ordinals → standing flip)
             </button>
@@ -125,7 +125,7 @@ export default function Show() {
             <div className="font-medium">
               Mark an import explicitly (never silent — the same-user origin posture)
             </div>
-            <input type="hidden" name="authenticity_token" value={csrfToken()} />
+            <input type="hidden" name="_csrf_token" value={csrfToken()} />
             <input name="version_seq" placeholder="version_seq" className="rounded border px-2 py-1 text-sm" />
             <input name="ordinal" placeholder="ordinal" className="rounded border px-2 py-1 text-sm" />
             <input name="source_urn" placeholder="the import source urn" className="w-80 rounded border px-2 py-1 text-sm" />

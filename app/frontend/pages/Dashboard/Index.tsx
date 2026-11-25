@@ -79,7 +79,7 @@ export default function Index() {
                       2026-11-24): topic + budgets + the routing map, exactly
                       the server action's own vocabulary. */}
                   <form data-testid="create-quest-form" method="post" action="/quests" className="space-y-2">
-                    <input type="hidden" name="authenticity_token" value={csrfToken()} />
+                    <input type="hidden" name="_csrf_token" value={csrfToken()} />
                     <input name="topic" required placeholder="topic — what this quest is after"
                            className="w-full rounded border px-2 py-1 text-sm" />
                     <fieldset className="space-y-1">

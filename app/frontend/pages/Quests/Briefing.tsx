@@ -60,14 +60,14 @@ export default function Briefing() {
               )}
               {!live && (
                 <form method="post" action={`/quests/${p.quest.id}/briefing/session`}>
-                  <input type="hidden" name="authenticity_token" value={csrfToken()} />
+                  <input type="hidden" name="_csrf_token" value={csrfToken()} />
                   <button type="submit" className="rounded border px-2 py-1 text-sm">
                     Open the briefing session
                   </button>
                 </form>
               )}
               <form method="post" action={`/quests/${p.quest.id}/console/session/end`}>
-                <input type="hidden" name="authenticity_token" value={csrfToken()} />
+                <input type="hidden" name="_csrf_token" value={csrfToken()} />
                 <button type="submit" disabled={!live}
                         className="rounded border px-2 py-1 text-sm disabled:opacity-40">
                   Sign-off (ends the session)
@@ -92,7 +92,7 @@ export default function Briefing() {
         <section data-testid="agenda-stage-form" className="space-y-2">
           <h2 className="text-lg font-semibold">Stage an agenda doc</h2>
           <form method="post" action={`/quests/${p.quest.id}/briefing/agenda`} className="space-y-2">
-            <input type="hidden" name="authenticity_token" value={csrfToken()} />
+            <input type="hidden" name="_csrf_token" value={csrfToken()} />
             <input name="url" placeholder="https://…" disabled={!live}
                    className="w-80 rounded border px-2 py-1 text-sm" />
             <input name="title" placeholder="title" disabled={!live}
@@ -125,7 +125,7 @@ export default function Briefing() {
             current: {p.topic_questions.length > 0 ? p.topic_questions.join(' · ') : 'none recorded'}
           </p>
           <form method="post" action={`/quests/${p.quest.id}/briefing/questions`} className="space-y-2">
-            <input type="hidden" name="authenticity_token" value={csrfToken()} />
+            <input type="hidden" name="_csrf_token" value={csrfToken()} />
             <input name="questions[]" placeholder="question 1" disabled={!live}
                    className="w-80 rounded border px-2 py-1 text-sm" />
             <input name="questions[]" placeholder="question 2" disabled={!live}

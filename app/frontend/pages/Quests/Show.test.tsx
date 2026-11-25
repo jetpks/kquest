@@ -81,7 +81,7 @@ describe('Quests/Show', () => {
     expect(forms.map((f) => f.getAttribute('action'))).toEqual([
       '/quests/q1/pause', '/quests/q1/resume', '/quests/q1/archive',
     ])
-    expect(forms[0].querySelector('input[name="authenticity_token"]')).not.toBeNull()
+    expect(forms[0].querySelector('input[name="_csrf_token"]')).not.toBeNull()
     const hrefs = Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'))
     expect(hrefs).toContain('/quests/q1/console')
     expect(hrefs).toContain('/quests/q1/briefing')

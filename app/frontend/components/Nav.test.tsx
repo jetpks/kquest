@@ -40,7 +40,7 @@ describe('Nav sign-in doors', () => {
     expect(github?.getAttribute('action')).toBe('/auth/github')
     expect(dev?.getAttribute('action')).toBe('/auth/developer')
     // The dev door carries the same CSRF bridge as the GitHub door.
-    expect(dev?.querySelector('input[name="authenticity_token"]')).toBeTruthy()
+    expect(dev?.querySelector('input[name="_csrf_token"]')).toBeTruthy()
   })
 
   it('renders no sign-in doors for a signed-in user', () => {

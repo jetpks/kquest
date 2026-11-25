@@ -79,7 +79,7 @@ describe('Quests/Briefing', () => {
     const signOff = Array.from(live.container.querySelectorAll('form')).find(
       (f) => f.getAttribute('action') === '/quests/q1/console/session/end'
     )!
-    expect(signOff.querySelector('input[name="authenticity_token"]')).not.toBeNull()
+    expect(signOff.querySelector('input[name="_csrf_token"]')).not.toBeNull()
 
     const sessionless = renderPage({ session: null })
     const sessionlessActions = Array.from(sessionless.container.querySelectorAll('form')).map((f) =>

@@ -62,7 +62,7 @@ describe('Dashboard/Index', () => {
     expect(form!.getAttribute('method')).toBe('post')
     expect(form!.getAttribute('action')).toBe('/quests')
     for (const name of [
-      'authenticity_token', 'topic', 'web_call_budget', 'token_budget',
+      '_csrf_token', 'topic', 'web_call_budget', 'token_budget',
       'spend_budget_usd', 'process_config', 'model_config',
     ]) {
       expect(form!.querySelector(`[name="${name}"]`), `field ${name}`).not.toBeNull()

@@ -58,7 +58,7 @@ export default function Console() {
         {active && (
           <section data-testid="pause-door" className="space-x-2">
             <form method="post" action={`/quests/${questId}/pause`} className="inline">
-              <input type="hidden" name="authenticity_token" value={csrfToken()} />
+              <input type="hidden" name="_csrf_token" value={csrfToken()} />
               <button type="submit" className="rounded border px-2 py-1 text-sm">
                 Pause
               </button>

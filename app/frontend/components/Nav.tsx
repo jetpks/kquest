@@ -55,7 +55,7 @@ export default function Nav() {
             <>
               {providers.includes('github') && (
                 <form action="/auth/github" method="post">
-                  <input type="hidden" name="authenticity_token" value={csrfToken()} />
+                  <input type="hidden" name="_csrf_token" value={csrfToken()} />
                   <Button type="submit" size="sm">
                     <LogIn className="size-4" /> Sign in with GitHub
                   </Button>
@@ -63,7 +63,7 @@ export default function Nav() {
               )}
               {providers.includes('developer') && (
                 <form action="/auth/developer" method="post">
-                  <input type="hidden" name="authenticity_token" value={csrfToken()} />
+                  <input type="hidden" name="_csrf_token" value={csrfToken()} />
                   <Button type="submit" size="sm" variant="outline">
                     <LogIn className="size-4" /> Dev sign-in
                   </Button>

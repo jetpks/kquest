@@ -95,7 +95,7 @@ describe('Reports/Show', () => {
     const actions = Array.from(container.querySelectorAll('form')).map((f) => f.getAttribute('action'))
     const draft = container.querySelector('[data-testid="draft-form"]')!
     expect(draft.getAttribute('action')).toContain('/report/draft')
-    expect(draft.querySelector('input[name="authenticity_token"]')).not.toBeNull()
+    expect(draft.querySelector('input[name="_csrf_token"]')).not.toBeNull()
     for (const name of ['section', 'version', 'body']) {
       expect(draft.querySelector(`[name="${name}"]`)).not.toBeNull()
     }
