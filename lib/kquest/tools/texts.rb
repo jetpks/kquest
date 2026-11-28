@@ -189,6 +189,7 @@ module Kquest
         # report_draft
         ["report_draft", "section-too-large"] => [[/capped at \d+ chars/, :cap, false]],
         ["report_draft", "version-frozen"]    => [[/version \d+/, :version, false]],
+        ["report_draft", "phase-not-synthesis"] => [[/decompose\(1\/1\)/, :phase, false]],
         # report_bind
         ["report_bind", "ordinal-unbound"]    => [[/\[\^\d+\]/, :ordinal, false],
                                                   [/holds \d+ sources \(ordinals 1\.\.\d+/, :corpus, false],

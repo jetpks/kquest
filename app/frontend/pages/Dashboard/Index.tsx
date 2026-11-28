@@ -14,20 +14,44 @@ import { CappedListing, MetricsFamily, OverhangRow, QuestRow, SharedProps } from
 
 // The DASHBOARD (I08 §4 row 1 / I16 Part 3) — the root landing surface.
 // Anonymous: the 200 sign-in prompt card (the Nav's GitHub button is the only
-// auth door — a redirect here would loop). Signed-in: the ONE write — the
-// pre-briefing create-quest form (topic + budgets + routing map; the ROW
-// ONLY) — then quest cards (capped), the blind-spot panel (Metrics families
-// + the overhang join), the honesty-bounds ladder (static text, I07 §1's
-// guarantee map), and workspace-admin reads (render-only; the grant UI is
-// I17's).
+// auth door — a redirect here would loop). Signed-in: the pre-briefing
+// create-quest form (topic + budgets + routing map), then quest cards
+// (capped), the blind-spot panel (Metrics families + the overhang join), the
+// honesty-bounds ladder (static text, I07 §1's guarantee map), and the
+// workspace-admin section (I19): the WRITE half of the I02 workspace/sharing
+// model — create/rename workspaces, add/remove members, grant
+// public/workspace scope, revoke — seven forms over the four capped lists.
+export type OwnedWorkspaceRow = { id: string; name: string; created_at: string }
+export type MemberRow = {
+  workspace_id: string
+  workspace_name: string
+  user_id: string
+  handle: string
+  joined_at: string
+}
+export type MembershipRow = { workspace_id: string; workspace_name: string; joined_at: string }
+export type GrantRow = {
+  id: string
+  source_id: string
+  source_urn: string
+  source_title: string | null
+  grantee_user_id: string | null
+  grantee_handle: string | null
+  grantee_workspace_id: string | null
+  workspace_name: string | null
+  is_public: boolean
+  note: string | null
+  granted_at: string
+}
 export type DashboardProps = {
   quests?: CappedListing<QuestRow>
   blind_spots?: MetricsFamily[]
   overhang?: OverhangRow[]
   workspaces?: {
-    workspaces: { id: string; name: string }[]
-    memberships: { workspace_id: string; user_id: string }[]
-    grants: { id: string; source_id: string; is_public: boolean }[]
+    owned: CappedListing<OwnedWorkspaceRow>
+    members: CappedListing<MemberRow>
+    memberships: CappedListing<MembershipRow>
+    grants: CappedListing<GrantRow>
   }
   stream_url?: string
 }
@@ -191,14 +215,153 @@ export default function Index() {
               ))}
             </section>
 
-            <section data-testid="workspaces" className="space-y-1">
+            <section data-testid="workspaces" className="space-y-2">
               <h2 className="text-lg font-semibold">Workspaces</h2>
-              {props.workspaces && props.workspaces.workspaces.length === 0 && (
-                <p className="text-sm text-muted-foreground">No workspaces yet (admin UI is I17&rsquo;s).</p>
+
+              {/* I19: the WRITE half of the I02 workspace/sharing model —
+                  seven forms (the affordance-AC lesson: the FORM is the
+                  deliverable — hidden _csrf_token + named fields + POST). */}
+              <form data-testid="create-workspace-form" method="post" action="/workspaces"
+                    className="space-y-2 rounded border p-2">
+                <input type="hidden" name="_csrf_token" value={csrfToken()} />
+                <input name="name" required placeholder="workspace slug, e.g. my-lab"
+                       className="w-full rounded border px-2 py-1 text-sm" />
+                <p className="text-xs text-muted-foreground">
+                  name must match ^[a-z0-9][a-z0-9-]&#123;0,63&#125;$ — a lowercase slug,
+                  1-64 chars (global; created workspaces make you their first member)
+                </p>
+                <button type="submit" className="rounded border px-2 py-1 text-sm">
+                  Create workspace
+                </button>
+              </form>
+
+              <form data-testid="public-grant-form" method="post" action="/grants/public"
+                    className="space-y-2 rounded border p-2">
+                <input type="hidden" name="_csrf_token" value={csrfToken()} />
+                <p className="text-xs text-muted-foreground">
+                  make one of your sources public — the grant row records who/why
+                </p>
+                <input name="source_urn" required placeholder="kb:src:… (a source you own)"
+                       className="w-full rounded border px-2 py-1 text-sm" />
+                <input name="note" required placeholder="why — the grant records who/why"
+                       className="w-full rounded border px-2 py-1 text-sm" />
+                <button type="submit" className="rounded border px-2 py-1 text-sm">
+                  Make source public
+                </button>
+              </form>
+
+              {props.workspaces && props.workspaces.owned.rows.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No workspaces yet — create one above; grants you issue are listed below.
+                </p>
               )}
-              {props.workspaces?.workspaces.map((w) => (
-                <p key={w.id} className="text-sm">{w.name}</p>
+
+              {props.workspaces?.owned.rows.map((w) => (
+                <Card key={w.id} data-testid="workspace-card" className="space-y-2">
+                  <CardHeader>
+                    <CardTitle className="text-sm">{w.name}</CardTitle>
+                    <CardDescription className="text-xs">owned workspace</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <form data-testid="workspace-rename-form" method="post"
+                            action={`/workspaces/${w.id}/rename`} className="flex gap-2">
+                        <input type="hidden" name="_csrf_token" value={csrfToken()} />
+                        <input name="name" required placeholder="new slug"
+                               className="w-full rounded border px-2 py-1 text-sm" />
+                        <button type="submit" className="rounded border px-2 py-1 text-sm">
+                          Rename
+                        </button>
+                      </form>
+                      <form data-testid="add-member-form" method="post"
+                            action={`/workspaces/${w.id}/members`} className="flex gap-2">
+                        <input type="hidden" name="_csrf_token" value={csrfToken()} />
+                        <input name="handle" required placeholder="user handle, e.g. gh-…"
+                               className="w-full rounded border px-2 py-1 text-sm" />
+                        <button type="submit" className="rounded border px-2 py-1 text-sm">
+                          Add member
+                        </button>
+                      </form>
+                    </div>
+                    <ul className="space-y-1">
+                      {(props.workspaces?.members.rows ?? [])
+                        .filter((m) => m.workspace_id === w.id)
+                        .map((m) => (
+                          <li key={m.user_id} className="flex items-center gap-2 text-sm">
+                            <span>
+                              {m.handle}
+                              <span className="text-muted-foreground">
+                                {' '}(joined {m.joined_at})
+                              </span>
+                            </span>
+                            <form data-testid="remove-member-form" method="post"
+                                  action={`/workspaces/${w.id}/members/remove`}>
+                              <input type="hidden" name="_csrf_token" value={csrfToken()} />
+                              <input type="hidden" name="handle" value={m.handle} />
+                              <button type="submit"
+                                      className="rounded border px-2 py-0.5 text-xs">
+                                remove
+                              </button>
+                            </form>
+                          </li>
+                        ))}
+                    </ul>
+                    <form data-testid="workspace-grant-form" method="post"
+                          action={`/workspaces/${w.id}/grants`} className="space-y-2">
+                      <input type="hidden" name="_csrf_token" value={csrfToken()} />
+                      <p className="text-xs text-muted-foreground">
+                        grant one of your sources to {w.name} — its members can read it
+                      </p>
+                      <input name="source_urn" required placeholder="kb:src:… (a source you own)"
+                             className="w-full rounded border px-2 py-1 text-sm" />
+                      <input name="note" required placeholder="why — the grant records who/why"
+                             className="w-full rounded border px-2 py-1 text-sm" />
+                      <button type="submit" className="rounded border px-2 py-1 text-sm">
+                        Grant source to {w.name}
+                      </button>
+                    </form>
+                  </CardContent>
+                </Card>
               ))}
+              <ShowingOf listing={props.workspaces?.owned} />
+              <ShowingOf listing={props.workspaces?.members} />
+
+              <div className="space-y-1">
+                <h3 className="text-sm font-medium">Your memberships</h3>
+                {(props.workspaces?.memberships.rows ?? []).map((m) => (
+                  <p key={m.workspace_id} className="text-sm text-muted-foreground">
+                    member of {m.workspace_name} (joined {m.joined_at})
+                  </p>
+                ))}
+                {(props.workspaces?.memberships.rows ?? []).length === 0 && (
+                  <p className="text-sm text-muted-foreground">no memberships yet.</p>
+                )}
+                <ShowingOf listing={props.workspaces?.memberships} />
+              </div>
+
+              <div className="space-y-1">
+                <h3 className="text-sm font-medium">Grants you issued</h3>
+                {(props.workspaces?.grants.rows ?? []).map((g) => (
+                  <div key={g.id} className="flex items-center gap-2 text-sm">
+                    <span>
+                      {g.source_urn}
+                      {g.source_title ? ` — ${g.source_title}` : ''} · {grantScope(g)}
+                      {g.note ? ` · note: ${g.note}` : ''} · granted {g.granted_at}
+                    </span>
+                    <form data-testid="revoke-grant-form" method="post"
+                          action={`/grants/${g.id}/revoke`}>
+                      <input type="hidden" name="_csrf_token" value={csrfToken()} />
+                      <button type="submit" className="rounded border px-2 py-0.5 text-xs">
+                        revoke
+                      </button>
+                    </form>
+                  </div>
+                ))}
+                {(props.workspaces?.grants.rows ?? []).length === 0 && (
+                  <p className="text-sm text-muted-foreground">no grants issued.</p>
+                )}
+                <ShowingOf listing={props.workspaces?.grants} />
+              </div>
             </section>
 
             {props.stream_url && (
@@ -212,6 +375,17 @@ export default function Index() {
       </div>
     </AppLayout>
   )
+}
+
+// The I02 scope ladder's display half: public (the global door), workspace
+// (a named group), shared (one user — rendered read-only; the row is the
+// operator's own and stays revocable), private is the ABSENCE of a grant
+// row and never reaches this list.
+function grantScope(g: GrantRow): string {
+  if (g.is_public) return 'public'
+  if (g.grantee_workspace_id) return `workspace ${g.workspace_name ?? ''}`
+  if (g.grantee_user_id) return `shared with ${g.grantee_handle ?? ''}`
+  return 'unknown'
 }
 
 // The F10 move (I17): the shared "showing N of M" caption lives in

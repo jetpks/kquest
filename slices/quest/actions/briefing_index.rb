@@ -4,16 +4,21 @@ require "json"
 
 module Quest
   module Actions
-    # GET /quests/:quest_id/briefing — the INTERACTIVE BRIEFING page (I17
-    # Part 3 / I06 §8 + I08 §5.3): the quest row + state; the agenda list
-    # (the quest's role-`agenda` sources via quest_sources ⋈ sources —
-    # capped, surface `briefing`); the open briefing session state (Part
-    # 0.1's current_session); the binding decompose round-1 phase id; the
-    # current topic_questions (from that phase's `result` jsonb — the I03
-    # DR-14 carrier) + the topic; and the `agenda_staged` gate state (the
-    # transition law's own predicate shape: ≥1 agenda source — rendered
-    # HONESTLY: sign-off without staged agenda leaves the worker
-    # `awaiting_briefing`, presented, never blocked). OWNER-gated (Part 0.1).
+    # GET /quests/:quest_id/briefing — the CHAT page (I18 the §8 amendment;
+    # was the I17 staging-forms briefing): the quest row + state; the agenda
+    # list (the quest's role-`agenda` sources via quest_sources ⋈ sources —
+    # capped, surface `briefing`, the UNCHANGED query); the open briefing
+    # session state; the binding decompose round-1 phase id; the current
+    # topic_questions (from that phase's `result` jsonb — the I03 DR-14
+    # carrier) + the topic; the TRANSCRIPT (the ledger blob replayed through
+    # the reader's sink seam — BriefingTranscript.for_session, tail-capped
+    # with the honest omitted count) + the QUEUED (still-`enqueued` operator
+    # turns of the open session — the worker's service order); and the
+    # `agenda_staged` gate state (the transition law's own predicate shape:
+    # ≥1 agenda source — rendered HONESTLY: sign-off without staged agenda
+    # leaves the worker `awaiting_briefing`, presented, never blocked).
+    # OWNER-gated (Part 0.1). The agenda/gate/questions render AS TRANSCRIPT
+    # CONTEXT — never as forms.
     class BriefingIndex < Kquest::Action
       include Kquest::Deps["db.gateway"]
 
@@ -40,17 +45,21 @@ module Quest
         questions = binding_phase && topic_questions(binding_phase)
         {
           quest: quest_props(quest),
-          agenda: agenda,
-          agenda_staged: agenda[:rows].any?,
           session: session && {id: session.fetch(:id), model: session.fetch(:model),
                                phase_id: session.fetch(:phase_id),
                                started_at: session.fetch(:started_at).iso8601},
+          agenda: agenda,
+          agenda_staged: agenda[:rows].any?,
+          topic_questions: questions || [],
+          topic: quest.fetch(:topic),
+          transcript: transcript(session),
+          queued: queued(session),
+          unsent: unsent(qid),
           binding_phase_id: binding_phase && binding_phase.fetch(:id),
           binding_phase: binding_phase && "#{binding_phase.fetch(:kind)}" \
                                           "(#{binding_phase.fetch(:round_no)}/" \
                                           "#{binding_phase.fetch(:attempt_no)})",
-          topic_questions: questions || [],
-          topic: quest.fetch(:topic),
+          stream_url: "/quests/#{qid}/stream",
           console_url: "/quests/#{qid}/console",
           view_url: "/quests/#{qid}"
         }
@@ -58,6 +67,49 @@ module Quest
 
       def quest_props(quest)
         {id: quest.fetch(:id), topic: quest.fetch(:topic), state: quest.fetch(:state)}
+      end
+
+      # The replayed conversation (the cold-boot law): the session ledger blob
+      # through the reader's sink seam — tail-capped, honest omitted count.
+      # No session → nothing to replay (the blob is session-keyed).
+      def transcript(session)
+        return {lines: [], omitted: 0} unless session
+
+        Kquest::Ui::BriefingTranscript.for_session(conn, session)
+      end
+
+      # The open session's still-`enqueued` turns in service order (the
+      # worker's own ORDER BY seq) — rendered as queued. No session →
+      # nothing is servable (PH0-CU-2; a banked session's leftovers are the
+      # dead-letter mark's business, never "queued").
+      def queued(session)
+        return [] unless session
+
+        conn[:briefing_turns]
+          .where(session_id: session.fetch(:id), state: "enqueued")
+          .order(:seq)
+          .select(:id, :seq, :body, :created_at)
+          .to_a
+      end
+
+      # The CLOSED operator sessions' still-`enqueued` turns (the banked
+      # residue, I20 Part 7): a governor bank (bank_session!) closes the
+      # session WITHOUT the dead-letter door, so these rows are reached by NO
+      # door until the next sign-off (end_session!'s dead-letter UPDATE is
+      # quest-keyed and catches them then). Rendered mutation-free as unsent —
+      # never queued (PH0-CU-2: only an open session's rows are servable); no
+      # new door, no worker change, no cap.
+      def unsent(quest_id)
+        conn[:briefing_turns]
+          .join(:sessions, Sequel[:sessions][:id] => Sequel[:briefing_turns][:session_id])
+          .where(Sequel[:sessions][:quest_id] => quest_id,
+                 Sequel[:sessions][:driver] => "operator")
+          .exclude(Sequel[:sessions][:ended_at] => nil)
+          .where(Sequel[:briefing_turns][:state] => "enqueued")
+          .order(Sequel[:briefing_turns][:seq])
+          .select(Sequel[:briefing_turns][:id], Sequel[:briefing_turns][:seq],
+                  Sequel[:briefing_turns][:body], Sequel[:briefing_turns][:created_at])
+          .to_a
       end
 
       # The agenda staging list: role-`agenda` sources joined on the quest —

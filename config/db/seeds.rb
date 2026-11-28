@@ -219,7 +219,22 @@ PHASE_TASK_TEXTS = {
     [20, nil, "I07 DR-02 ruling A (fixed n = 20, seeded, stratified per " \
               "verification phase)"],
   "assurance.poll_interval_s" =>
-    [30, nil, "I08 §3.4 default (the assurance_alert poller cadence)"]
+    [30, nil, "I08 §3.4 default (the assurance_alert poller cadence)"],
+  "phase_task_text.briefing" =>
+    [nil,
+     "Converse with the operator to decompose the quest's top-level question: " \
+     "search the web with web_search and stage what you find as agenda " \
+     "documents with agenda_stage (agenda sources are readable direction — " \
+     "never anchorable, never citable); write the topic questions with " \
+     "topic_questions (and freeze the topic when it settles); address the " \
+     "operator's messages as they arrive and let the agenda, the questions, " \
+     "and the topic EMERGE from the conversation; the session ends at the " \
+     "operator's sign-off.",
+     "I18 (the briefing chat) — the task text transcribed from I06 §8 + the " \
+     "§8 amendment (one chat surface; the agent searches through the " \
+     "budgeted web tools; agenda content and topic questions EMERGE from the " \
+     "conversation; operator turns ENQUEUE, the WORKER executes the agent " \
+     "turns)"]
 }.freeze
 
 # --- the I16 UI listing caps (L15: caps on EVERY listing surface) ------------
@@ -242,7 +257,14 @@ UI_LISTING_CAPS = {
   # listings cap too; CappedListing raises on an unknown surface, so these
   # rows are load-bearing, not decorative):
   "ui.listing_cap.console"   => [50, "I17 Part 1 (the console's ladder/lifecycle/mute listings; one screen's worth per surface)"],
-  "ui.listing_cap.briefing"  => [30, "I17 Part 3 (the briefing's agenda list; staged docs per session run short)"]
+  "ui.listing_cap.briefing"  => [30, "I17 Part 3 (the briefing's agenda list; staged docs per session run short)"],
+  # The I18 chat transcript tail (the reader's cap; L15 — the omitted count
+  # is honest):
+  "ui.listing_cap.briefing_transcript" => [200, "I18 (the chat transcript tail; L15)"],
+  # The I19 dashboard workspace-admin section's FOUR lists ride the ONE
+  # surface (the console precedent; L15):
+  "ui.listing_cap.workspace_admin" => [50, "I19 (the dashboard's workspace-admin section lists; " \
+                                            "one screen's worth per surface — the console precedent)"]
 }.freeze
 
 conn.transaction do

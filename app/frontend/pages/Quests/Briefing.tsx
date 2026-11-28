@@ -1,4 +1,5 @@
-import { Head, usePage } from '@inertiajs/react'
+import { Head, usePage, router } from '@inertiajs/react'
+import { useEffect } from 'react'
 import {
   Card,
   CardContent,
@@ -9,23 +10,76 @@ import {
 import { csrfToken } from '@/lib/csrf'
 import AppLayout from '@/layouts/AppLayout'
 import ShowingOf from '@/components/ShowingOf'
-import { BriefingProps, SharedProps } from '@/types'
+import { BriefingProps, SharedProps, TranscriptLine } from '@/types'
 
-// THE INTERACTIVE BRIEFING (I06 §8 + I08 §5.3 / I17 Part 3): the session
-// open/state (the LANDED launch gate — decompose round 1 per I01 DR-13),
-// the agenda staging form (the LANDED FetchBody door — role `agenda`, idem
-// by content address, keyless), the agenda list (capped), the topic-questions
-// form (the I03 DR-14 carrier) with the optional topic freeze, the
-// agenda_staged gate state rendered HONESTLY (sign-off without staged agenda
-// leaves the worker awaiting_briefing — presented, never blocked), and the
-// sign-off button (POSTs the landed console/session/end door — DR-04 ruling
-// A: the operator ends the session; autonomy resumes). NO web-process LLM
-// turns anywhere — the agent half of round 1 is the autonomous decompose the
-// hand-off opens.
+// THE CHAT (I06 §8 + the §8 amendment / I18 Spec Part 2.5): ONE chat surface
+// — the conversation replays from the ledger blob (the transcript list), the
+// operator's send box ENQUEUEs a turn (POST to the turns door with the
+// `_csrf_token` wire name — NO LLM in the web process; the worker executes
+// the agent half), still-enqueued turns render as queued, and the agenda
+// list + the agenda_staged gate state + the topic questions + the topic
+// render AS TRANSCRIPT CONTEXT — never as forms (no staging inputs, no
+// question inputs, no topic-freeze box anywhere in this tree). The
+// open-session button (absent session) and the sign-off button (the console
+// door, disabled without a session) carry the honest gate line: sign-off
+// without staged agenda leaves the worker awaiting_briefing — presented,
+// never blocked. ONE EventSource on the frozen stream URL; EVERY event
+// reloads the page props (the transcript + queued + gate context refetch).
+function ChatLine({ line }: { line: TranscriptLine }) {
+  if (line.kind === 'operator') {
+    return (
+      <div className="flex justify-end">
+        <p className="max-w-[80%] rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground whitespace-pre-wrap">
+          {line.body}
+        </p>
+      </div>
+    )
+  }
+  if (line.kind === 'final') {
+    return (
+      <div className="flex justify-start">
+        <p className="max-w-[80%] rounded-lg bg-muted px-3 py-2 text-sm whitespace-pre-wrap">
+          {line.body}
+        </p>
+      </div>
+    )
+  }
+  if (line.kind === 'tool_call') {
+    return (
+      <p className="font-mono text-xs text-muted-foreground">
+        → {line.tool}({line.excerpt})
+      </p>
+    )
+  }
+  if (line.kind === 'tool_result') {
+    return (
+      <p className={`font-mono text-xs ${line.is_error ? 'text-destructive' : 'text-muted-foreground'}`}>
+        ← {line.tool}{line.is_error ? ' (error)' : ''}: {line.excerpt}
+      </p>
+    )
+  }
+  return (
+    <p className="rounded border border-dashed px-2 py-1 font-mono text-xs text-muted-foreground">
+      [salvaged partial — audit only] {line.body}
+    </p>
+  )
+}
+
 export default function Briefing() {
   const { current_user } = usePage<SharedProps>().props
   const p = usePage<BriefingProps>().props
   const live = !!p.session
+
+  useEffect(() => {
+    // jsdom has no EventSource — the EventFeed guard pattern; the tests
+    // install a mock. ONE subscription, owned by the page (no new files).
+    if (typeof window.EventSource === 'undefined') return
+    const source = new window.EventSource(p.stream_url)
+    source.onmessage = () => {
+      router.reload()
+    }
+    return () => source.close()
+  }, [p.stream_url])
 
   return (
     <AppLayout>
@@ -72,8 +126,10 @@ export default function Briefing() {
                         className="rounded border px-2 py-1 text-sm disabled:opacity-40">
                   Sign-off (ends the session)
                 </button>
-                <span className="ml-2 text-xs text-muted-foreground">
-                  the sign-off is the autonomy threshold — the orchestrator resumes at its next tick
+                <span className="ml-2 text-xs text-muted-foreground" data-testid="gate-honesty">
+                  {p.agenda_staged
+                    ? 'the sign-off is the autonomy threshold — the orchestrator resumes at its next tick'
+                    : 'sign-off without staged agenda leaves the worker awaiting_briefing (presented, never blocked)'}
                 </span>
               </form>
             </CardContent>
@@ -89,54 +145,95 @@ export default function Briefing() {
           </span>
         </section>
 
-        <section data-testid="agenda-stage-form" className="space-y-2">
-          <h2 className="text-lg font-semibold">Stage an agenda doc</h2>
-          <form method="post" action={`/quests/${p.quest.id}/briefing/agenda`} className="space-y-2">
-            <input type="hidden" name="_csrf_token" value={csrfToken()} />
-            <input name="url" placeholder="https://…" disabled={!live}
-                   className="w-80 rounded border px-2 py-1 text-sm" />
-            <input name="title" placeholder="title" disabled={!live}
-                   className="w-80 rounded border px-2 py-1 text-sm" />
-            <textarea name="text" placeholder="the document text (the operator supplies it — keyless)"
-                      disabled={!live} rows={4} className="w-full rounded border px-2 py-1 text-sm" />
-            <button type="submit" disabled={!live}
-                    className="rounded border px-2 py-1 text-sm disabled:opacity-40">
-              Stage (content-address idem — re-staging registers membership only)
-            </button>
-          </form>
-        </section>
-
-        <section data-testid="agenda-list" className="space-y-1">
-          <h2 className="text-lg font-semibold">Agenda ({p.agenda.rows.length})</h2>
-          {p.agenda.rows.map((doc) => (
-            <p key={doc.id} className="text-sm">
-              {doc.title} · <span className="font-mono text-muted-foreground">{doc.urn}</span>
+        <section data-testid="chat-transcript" className="space-y-2">
+          <h2 className="text-lg font-semibold">Conversation</h2>
+          {p.transcript.lines.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              nothing said yet — say what the quest should answer.
             </p>
-          ))}
-          {p.agenda.rows.length === 0 && (
-            <p className="text-sm text-muted-foreground">nothing staged yet.</p>
           )}
-          <ShowingOf listing={p.agenda} />
+          <div className="space-y-2">
+            {p.transcript.lines.map((line, i) => (
+              <ChatLine key={i} line={line} />
+            ))}
+          </div>
+          {p.transcript.omitted > 0 && (
+            <p className="text-xs text-muted-foreground">
+              showing the last {p.transcript.lines.length} of{' '}
+              {p.transcript.lines.length + p.transcript.omitted} lines.
+            </p>
+          )}
         </section>
 
-        <section data-testid="questions-form" className="space-y-2">
-          <h2 className="text-lg font-semibold">Topic questions</h2>
-          <p className="text-xs text-muted-foreground">
-            current: {p.topic_questions.length > 0 ? p.topic_questions.join(' · ') : 'none recorded'}
-          </p>
-          <form method="post" action={`/quests/${p.quest.id}/briefing/questions`} className="space-y-2">
+        {p.queued.length > 0 && (
+          <section data-testid="queued-turns" className="space-y-1">
+            <h2 className="text-sm font-semibold">Queued (the worker will serve these)</h2>
+            {p.queued.map((turn) => (
+              <p key={turn.id} className="text-sm text-muted-foreground">
+                #{turn.seq} · {turn.body}
+              </p>
+            ))}
+          </section>
+        )}
+
+        {p.unsent.length > 0 && (
+          <section data-testid="unsent-turns" className="space-y-1">
+            <h2 className="text-sm font-semibold text-muted-foreground">
+              Unsent — a closed session never consumes these; the next sign-off dead-letters
+              them
+            </h2>
+            {p.unsent.map((turn) => (
+              <p key={turn.id} className="text-sm text-muted-foreground">
+                #{turn.seq} · {turn.body}
+              </p>
+            ))}
+          </section>
+        )}
+
+        <section data-testid="send-turn" className="space-y-2">
+          <form method="post" action={`/quests/${p.quest.id}/briefing/turns`} className="space-y-2">
             <input type="hidden" name="_csrf_token" value={csrfToken()} />
-            <input name="questions[]" placeholder="question 1" disabled={!live}
-                   className="w-80 rounded border px-2 py-1 text-sm" />
-            <input name="questions[]" placeholder="question 2" disabled={!live}
-                   className="w-80 rounded border px-2 py-1 text-sm" />
-            <input name="topic" placeholder={`freeze the topic (current: ${p.topic})`} disabled={!live}
-                   className="w-80 rounded border px-2 py-1 text-sm" />
+            <textarea
+              name="body"
+              placeholder={live ? 'steer the agent — it searches, stages, and writes the questions' : 'open a briefing session first'}
+              disabled={!live}
+              rows={3}
+              className="w-full rounded border px-2 py-1 text-sm"
+            />
             <button type="submit" disabled={!live}
                     className="rounded border px-2 py-1 text-sm disabled:opacity-40">
-              Record (the merge rides the binding phase's result)
+              Send (enqueues the turn — the worker replies in the transcript)
             </button>
           </form>
+        </section>
+
+        <section data-testid="context-strip" className="space-y-1">
+          <h2 className="text-sm font-semibold">Context (emerging from the conversation)</h2>
+          <p className="text-sm">
+            topic: <span className="font-medium">{p.topic}</span>
+          </p>
+          <div>
+            <p className="text-sm font-medium">Topic questions ({p.topic_questions.length})</p>
+            {p.topic_questions.length > 0 ? (
+              p.topic_questions.map((q) => (
+                <p key={q} className="text-sm text-muted-foreground">· {q}</p>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">none recorded yet — the agent writes them.</p>
+            )}
+          </div>
+          <div>
+            <p className="text-sm font-medium">Agenda ({p.agenda.rows.length})</p>
+            {p.agenda.rows.map((doc) => (
+              <p key={doc.id} className="text-sm">
+                {doc.title} · <span className="font-mono text-muted-foreground">{doc.urn}</span>
+              </p>
+            ))}
+            {p.agenda.rows.length === 0 && (
+              <p className="text-sm text-muted-foreground">nothing staged yet — the agent searches and stages.</p>
+            )}
+            <ShowingOf listing={p.agenda} />
+          </div>
         </section>
 
         <section data-testid="surface-links" className="space-x-4 text-sm">

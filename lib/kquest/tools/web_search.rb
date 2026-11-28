@@ -7,7 +7,9 @@ module Kquest
     # budget line is HARD and exhausted the call is REFUSED before the wire
     # (the frozen text names the corpus tools + the never-reportless route).
     # Budget counting is DERIVED: the quest's tool_calls rows with tool IN
-    # ('web_search','web_fetch') AND ok — never stored.
+    # ('web_search','web_fetch','agenda_stage') AND ok — never stored (the
+    # staging tool joined the predicate in I18: a wire fetch is a web call,
+    # SR-02/D10).
     class WebSearch < Base
       tool_name "web_search"
 
@@ -32,13 +34,15 @@ module Kquest
       private
 
       # The web-call budget line: value = quests.web_call_budget (L9 — the
-      # parity law); mode = the engine_config line's mode (advisory by
-      # default, DR-09; a hard+exhausted line refuses BEFORE the wire).
+      # parity law); mode = the quest's process_config modes under the
+      # registry key quest.web_call_budget (the quest_budget_mode source —
+      # advisory by default, DR-09; a hard+exhausted line refuses BEFORE the
+      # wire).
       def check_budget!
         quest = conn[:quests].where(id: quest_id).first
         used = web_calls_used
         cap = quest.fetch(:web_call_budget)
-        mode = cfg_mode("engine.web_call_budget") || "advisory"
+        mode = quest_budget_mode(quest)
         return unless mode == "hard" && used >= cap
 
         refuse("web_search", "budget-exceeded",
@@ -52,7 +56,7 @@ module Kquest
 
       def web_calls_used
         conn[:tool_calls].where(quest_id: quest_id, ok: true)
-                         .where(Sequel[:tool] => %w[web_search web_fetch]).count
+                         .where(Sequel[:tool] => %w[web_search web_fetch agenda_stage]).count
       end
     end
   end

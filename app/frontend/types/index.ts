@@ -136,15 +136,41 @@ export type ConsoleProps = {
 }
 
 export type AgendaRow = { id: string; urn: string; title: string; added_at: string }
+
+// The I18 chat transcript's page lines (the reader's mapping —
+// lib/kquest/ui/briefing_transcript.rb): the ledger blob's landed line types
+// mapped to the four frozen kinds + the marked salvage (audit-only).
+export type TranscriptLine =
+  | { kind: 'operator'; body: string }
+  | { kind: 'final'; body: string }
+  | { kind: 'tool_call'; tool: string; excerpt: string }
+  | { kind: 'tool_result'; tool: string; excerpt: string; is_error: boolean }
+  | { kind: 'salvage'; body: string; marked: boolean }
+
+// A still-`enqueued` operator turn (the open session's service order — the
+// worker consumes ORDER BY seq).
+export type QueuedTurn = { id: string; seq: number; body: string; created_at: string }
+// (the CLOSED sessions' banked leftovers ride the same row shape as unsent —
+// same fields, different state; I20 Part 7).
+
+// The I18 CHAT page (the §8 amendment — replaced the I17 staging forms): the
+// agenda list, the agenda_staged gate state, and the topic questions ride in
+// AS CONTEXT, never as forms; the conversation replays from the ledger blob
+// (tail-capped, honest omitted count) and the still-enqueued turns render as
+// queued.
 export type BriefingProps = {
   quest: { id: string; topic: string; state: string }
+  session: OperatorSessionRow | null
   agenda: CappedListing<AgendaRow>
   agenda_staged: boolean
-  session: OperatorSessionRow | null
-  binding_phase_id: string | null
-  binding_phase: string | null
   topic_questions: string[]
   topic: string
+  transcript: { lines: TranscriptLine[]; omitted: number }
+  queued: QueuedTurn[]
+  unsent: QueuedTurn[]
+  binding_phase_id: string | null
+  binding_phase: string | null
+  stream_url: string
   console_url: string
   view_url: string
 }

@@ -118,6 +118,18 @@ module Kquest
         nil
       end
 
+      # The operator turn's transcript line (I18 the §8 amendment): ONE
+      # `{type: "operator", body: …}` JSONL line, buffered + flushed — its own
+      # write (not a turn transaction's), landed by the WORKER at consume time
+      # (the web process never writes the blob; the operator's turn enters the
+      # audit where the agent's turns do). The blob's location/sink law is
+      # unchanged.
+      def append_operator!(body:)
+        buffer({type: "operator", body: body})
+        flush_buffer!
+        nil
+      end
+
       # The tool RESULT line (the verbatim transcript's tool results — the
       # refusal texts included). The ToolHarness calls this next to its audit
       # row, inside the same transaction.

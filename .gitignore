@@ -6,3 +6,6 @@
 /storage/
 node_modules/
 /public/vite*/
+# Vite's dev/build cache (tmp/cache/vite/last-build-development.json re-dates
+# on every dev boot and build — the I17/I18 integrate trip)
+tmp/

@@ -64,6 +64,8 @@ module Kquest
       "source_list"     => "SourceList",
       "web_search"      => "WebSearch",
       "web_fetch"       => "WebFetch",
+      "agenda_stage"    => "AgendaStage",
+      "topic_questions" => "TopicQuestions",
       "retrieve"        => "Retrieve",
       "report_draft"    => "ReportDraft",
       "report_bind"     => "ReportBind",
@@ -167,6 +169,17 @@ module Kquest
         return Tools.config_mode(config, key) if config.key?(key)
 
         Kquest::Engine.config(conn).fetch(key, {}).fetch(:mode, nil)
+      end
+
+      # The web-call budget line's MODE source (I16 PHASE-0#2 / I20 Part 5):
+      # the quest row's process_config modes under the REGISTRY key
+      # `quest.web_call_budget` — the same key + source the phase runner's
+      # rule_mode reads (quests.process_config["modes"]); advisory default
+      # (DR-09). The mis-keyed `engine.web_call_budget` spelling is dead: no
+      # engine_config row ever carried it, so a hardened quest line never
+      # reached the tools' pre-wire refusal.
+      def quest_budget_mode(quest)
+        ((quest.fetch(:process_config) || {})["modes"] || {})["quest.web_call_budget"] || "advisory"
       end
 
       # The frozen refusal (T-LOCATE/DR-01): the fixture line with its slots

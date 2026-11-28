@@ -21,7 +21,13 @@ class DashboardIndexTest < Minitest::Test
 
   def teardown
     OmniAuth.config.mock_auth[:github] = :csrf_detected
+    # The I19 tables are NOT in the landed sweeps — reverse-FK order:
+    # grants → members → workspaces → cleanup.
+    conn[:resource_grants].delete
+    conn[:workspace_members].delete
+    conn[:workspaces].delete
     OrchestratorFixtures.cleanup(conn, user_id: @tenancy[:user_id])
+    OrchestratorFixtures.cleanup(conn, user_id: @mate_id) if @mate_id
   end
 
   def conn = @conn ||= Kquest::App["db.gateway"].connection
@@ -105,5 +111,94 @@ class DashboardIndexTest < Minitest::Test
     inertia_get("/")
     rows = conn[:cap_records].where(user_id: @tenancy[:user_id], surface: "dashboard")
     assert_equal 1, rows.count, "one telemetry row per capped listing request"
+  end
+
+  # ── the I19 workspace-admin props (Spec Part 3): the FOUR capped lists
+  #    ride the ONE surface `workspace_admin` ─────────────────────────────
+
+  def mint_workspace_admin_fixtures!
+    @workspace_id = conn[:workspaces].insert(name: "ws-props-01",
+                                             created_by_user_id: @tenancy[:user_id])
+    conn[:workspace_members].insert(workspace_id: @workspace_id,
+                                    user_id: @tenancy[:user_id])
+    @mate_id = conn[:users].insert(handle: "gh-mate-#{SecureRandom.hex(4)}",
+                                   github_uid: SecureRandom.uuid,
+                                   username: "u#{SecureRandom.hex(6)}",
+                                   name: "Mate", created_at: Time.now)
+    conn[:workspace_members].insert(workspace_id: @workspace_id, user_id: @mate_id)
+    @source = OrchestratorFixtures.mint_source(conn, user_id: @tenancy[:user_id],
+                                               quest_id: @tenancy[:quest_id],
+                                               snapshot: "dashboard props text")
+    @public_grant_id = conn[:resource_grants].insert(
+      owner_user_id: @tenancy[:user_id], source_id: @source[:id], is_public: true,
+      note: "the public note", granted_at: Time.now - 60
+    )
+    @ws_grant_id = conn[:resource_grants].insert(
+      owner_user_id: @tenancy[:user_id], source_id: @source[:id],
+      grantee_workspace_id: @workspace_id, note: "the workspace note", granted_at: Time.now
+    )
+  end
+
+  def test_workspace_admin_props_carry_the_four_capped_lists
+    seed_listing_cap("workspace_admin", 2)
+    mint_workspace_admin_fixtures!
+    sign_in_as_owner
+    _, _, body = inertia_get("/")
+    ws = parse_json(body)["props"]["workspaces"]
+
+    assert_equal %w[grants members memberships owned], ws.keys.sort,
+                 "the section's FOUR lists"
+
+    owned = ws["owned"]
+    assert_equal 1, owned["rows"].size
+    assert_equal ["created_at", "id", "name"], owned["rows"].first.keys.sort
+    assert_equal "ws-props-01", owned["rows"].first["name"]
+    assert_equal 2, owned["cap"], "the cap comes from ui.listing_cap.workspace_admin"
+
+    members = ws["members"]["rows"]
+    assert_equal 2, members.size, "the OWNED workspaces' members, joined to users"
+    assert_equal ["handle", "joined_at", "user_id", "workspace_id", "workspace_name"],
+                 members.first.keys.sort
+    assert_equal "ws-props-01", members.first["workspace_name"]
+    assert_includes members.map { |r| r["handle"] }, conn[:users].where(id: @mate_id).get(:handle)
+
+    memberships = ws["memberships"]["rows"]
+    assert_equal 1, memberships.size, "MY memberships joined to workspaces (read-only display)"
+    assert_equal ["joined_at", "workspace_id", "workspace_name"],
+                 memberships.first.keys.sort
+    assert_equal "ws-props-01", memberships.first["workspace_name"]
+  ensure
+    conn[:resource_grants].delete
+    conn[:workspace_members].delete
+    conn[:workspaces].delete
+    conn[:cap_records].where(user_id: @tenancy[:user_id]).delete
+  end
+
+  def test_workspace_admin_grants_rows_carry_the_join_display_fields
+    seed_listing_cap("workspace_admin", 50)
+    mint_workspace_admin_fixtures!
+    sign_in_as_owner
+    _, _, body = inertia_get("/")
+    grants = parse_json(body)["props"]["workspaces"]["grants"]["rows"]
+    assert_equal 2, grants.size
+    assert_equal @ws_grant_id, grants.first["id"],
+                 "granted_at DESC — the newer workspace grant first"
+    assert_equal "ws-props-01", grants.first["workspace_name"]
+    assert_equal "the workspace note", grants.first["note"]
+    assert_equal @source[:urn], grants.first["source_urn"], "the urn join"
+    assert_equal "Fixture source", grants.first["source_title"], "the title join"
+    refute_nil grants.first["granted_at"], "the when-carrier renders"
+
+    public_row = grants.last
+    assert_equal true, public_row["is_public"]
+    assert_nil public_row["workspace_name"],
+                 "a public grant's grantee columns are NULL — the LEFT join keeps the row"
+    assert_nil public_row["grantee_handle"]
+    assert_equal "the public note", public_row["note"]
+  ensure
+    conn[:resource_grants].delete
+    conn[:workspace_members].delete
+    conn[:workspaces].delete
+    conn[:cap_records].where(user_id: @tenancy[:user_id]).delete
   end
 end

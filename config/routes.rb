@@ -23,6 +23,19 @@ module Kquest
     # session, no worker, no briefing; the interactive briefing is I17's).
     post "/quests", to: "dashboard.create_quest"
 
+    # The workspace-admin doors (I19 Part 2): create/rename workspaces,
+    # add/remove members, grant-to-workspace, grant-public, revoke — the
+    # write halves of the I02 workspace/sharing model. All POST (the
+    # console-door house style), all CSRF-checked by default, all
+    # owner-gated (404 non-leak) through the ONE OperatorWrite door module.
+    post "/workspaces",                                     to: "dashboard.create_workspace"
+    post "/workspaces/:workspace_id/rename",                to: "dashboard.rename_workspace"
+    post "/workspaces/:workspace_id/members",               to: "dashboard.add_workspace_member"
+    post "/workspaces/:workspace_id/members/remove",        to: "dashboard.remove_workspace_member"
+    post "/workspaces/:workspace_id/grants",                to: "dashboard.create_workspace_grant"
+    post "/grants/public",                                  to: "dashboard.create_public_grant"
+    post "/grants/:grant_id/revoke",                        to: "dashboard.revoke_grant"
+
     # The read-surface slices (I16): quest view + lifecycle door + cost views,
     # frontier inspector + graph browser, report view — each slice's own
     # routes carry its URL map.

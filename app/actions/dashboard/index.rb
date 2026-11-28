@@ -16,9 +16,11 @@ module Kquest
       # the four Metrics blind-spot rows + the capped_listing_overhang join
       # from CapRecords.overhang_by_surface, per I08 §4 "joins when §2.5
       # telemetry lands"), the honesty-bounds ladder (static text on the
-      # page), and workspace-admin reads (render-only; the grant UI is
-      # I17's). The live quest cards feed off the user-level stream — the
-      # EventFeed component mounts on /alerts/stream.
+      # page), and the workspace-admin reads (I19: the four capped lists of
+      # the write-doored surface — create/rename/members/grants doors are
+      # POST /workspaces*, /grants/public, /grants/:id/revoke). The live
+      # quest cards feed off the user-level stream — the EventFeed component
+      # mounts on /alerts/stream.
       class Index < Kquest::Action
         include Kquest::Deps["db.gateway"]
 
@@ -75,16 +77,71 @@ module Kquest
                                        .select { |f| BLIND_SPOT_FAMILIES.include?(f[:name]) }
         end
 
-        # Workspace-admin READS (I02): the user's owned workspaces, their
-        # memberships, and the grants they issued — render-only.
+        # Workspace-admin READS (I19 Spec Part 3): the section's FOUR lists
+        # ride the ONE capped surface `workspace_admin` (the console's
+        # one-surface-per-section precedent). The I17 §5.2 render-only
+        # exemption's reason ("write UI is a future entry") died with this
+        # entry's write doors — and the hardcoded grants cap with it (the cap
+        # comes from ui.listing_cap.workspace_admin, DEFAULT_CAPS the
+        # fallback). Grants LEFT-join the grantee tables: public grants have
+        # both grantee columns NULL and user-scope grants have
+        # grantee_workspace_id NULL — an inner join would silently drop the
+        # rows the list must render (user-scope read-only, still revocable).
         def workspace_admin_reads(user)
-          workspaces = conn[:workspaces].where(created_by_user_id: user.id)
-                                        .order(Sequel.asc(:created_at), :id).to_a
-          memberships = conn[:workspace_members].where(user_id: user.id)
-                                                .order(:workspace_id).to_a
-          grants = conn[:resource_grants].where(owner_user_id: user.id)
-                                         .order(Sequel.desc(:granted_at), :id).limit(50).to_a
-          {workspaces: workspaces, memberships: memberships, grants: grants}
+          owned_ids = conn[:workspaces].where(created_by_user_id: user.id).select(:id)
+          owned = Kquest::Ui::CappedListing.call(
+            conn, conn[:workspaces].where(created_by_user_id: user.id)
+                                  .select(:id, :name, :created_at),
+            surface: "workspace_admin", user_id: user.id,
+            order: [Sequel.asc(:created_at), Sequel.asc(:id)]
+          )
+          members = Kquest::Ui::CappedListing.call(
+            conn, conn[:workspace_members]
+                   .join(:workspaces, id: Sequel[:workspace_members][:workspace_id])
+                   .join(:users, id: Sequel[:workspace_members][:user_id])
+                   .where(workspace_id: owned_ids)
+                   .select(Sequel[:workspace_members][:workspace_id],
+                           Sequel[:workspaces][:name].as(:workspace_name),
+                           Sequel[:workspace_members][:user_id],
+                           Sequel[:users][:handle],
+                           Sequel[:workspace_members][:joined_at]),
+            surface: "workspace_admin", user_id: user.id,
+            order: [Sequel.asc(Sequel[:workspace_members][:workspace_id]),
+                    Sequel.asc(Sequel[:workspace_members][:joined_at]),
+                    Sequel.asc(Sequel[:workspace_members][:user_id])]
+          )
+          memberships = Kquest::Ui::CappedListing.call(
+            conn, conn[:workspace_members]
+                   .join(:workspaces, id: Sequel[:workspace_members][:workspace_id])
+                   .where(Sequel[:workspace_members][:user_id] => user.id)
+                   .select(Sequel[:workspace_members][:workspace_id],
+                           Sequel[:workspaces][:name].as(:workspace_name),
+                           Sequel[:workspace_members][:joined_at]),
+            surface: "workspace_admin", user_id: user.id,
+            order: [Sequel.asc(Sequel[:workspace_members][:workspace_id])]
+          )
+          grants = Kquest::Ui::CappedListing.call(
+            conn, conn[:resource_grants]
+                   .join(:sources, id: Sequel[:resource_grants][:source_id])
+                   .left_join(:workspaces, id: Sequel[:resource_grants][:grantee_workspace_id])
+                   .left_join(:users, id: Sequel[:resource_grants][:grantee_user_id])
+                   .where(Sequel[:resource_grants][:owner_user_id] => user.id)
+                   .select(Sequel[:resource_grants][:id],
+                           Sequel[:resource_grants][:source_id],
+                           Sequel[:sources][:urn].as(:source_urn),
+                           Sequel[:sources][:title].as(:source_title),
+                           Sequel[:resource_grants][:grantee_user_id],
+                           Sequel[:users][:handle].as(:grantee_handle),
+                           Sequel[:resource_grants][:grantee_workspace_id],
+                           Sequel[:workspaces][:name].as(:workspace_name),
+                           Sequel[:resource_grants][:is_public],
+                           Sequel[:resource_grants][:note],
+                           Sequel[:resource_grants][:granted_at]),
+            surface: "workspace_admin", user_id: user.id,
+            order: [Sequel.desc(Sequel[:resource_grants][:granted_at]),
+                    Sequel.asc(Sequel[:resource_grants][:id])]
+          )
+          {owned: owned, members: members, memberships: memberships, grants: grants}
         end
       end
     end

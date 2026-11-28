@@ -84,4 +84,34 @@ class ReaperTest < Minitest::Test
     conn[:quests].where(id: other[:quest_id]).delete
     conn[:users].where(id: other[:user_id]).delete
   end
+
+  # ── the I18 held-by-row clarification (Grounds §4.1/§5.5): BOTH sides ──
+
+  def test_operator_session_survives_the_sweep_held_by_its_row
+    session_id = open_session(driver: "operator")
+
+    assert_empty reaper.sweep(quest_id: @quest_id),
+                 "the operator row is NEVER reaped — the row IS the holder"
+    assert_nil conn[:sessions].where(id: session_id).get(:ended_at),
+               "sign-off (`end_session!`) is the only end (DR-04 ruling A)"
+
+    # ...even with a foreign liveness source that cannot see it: cross-process
+    # liveness cannot see a human's session; the row is the intent.
+    foreign = Kquest::Orchestrator::Reaper.new(
+      conn: conn,
+      liveness: Class.new { def session_live?(_) = false }.new
+    )
+    assert_empty foreign.sweep(quest_id: @quest_id),
+                 "an unclaimed-by-registry operator row still survives (held-by-row)"
+  end
+
+  def test_unclaimed_orchestrator_row_still_reaps
+    mine = open_session(driver: "orchestrator")
+
+    reaped = reaper.sweep(quest_id: @quest_id)
+
+    assert_includes reaped, mine,
+                    "an orchestrator row no live worker claims reaps (the FM-21 law unchanged)"
+    refute_nil conn[:sessions].where(id: mine).get(:ended_at)
+  end
 end

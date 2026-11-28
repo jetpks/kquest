@@ -14,6 +14,7 @@ require_relative "../engine/tool_harness"
 require_relative "../tools"
 require_relative "../queries/status_snapshot"
 require_relative "phase_contract"
+require_relative "briefing_executor"
 require_relative "verification_phase"
 require_relative "event_publisher"
 
@@ -56,7 +57,7 @@ module Kquest
       LOUD_EXITS = %w[mass-decay-primary plateau-cut-backstop drained-exit].freeze
 
       def initialize(conn:, supervisor:, publisher: nil, registry: nil, watcher: nil,
-                     contract_factory: nil, stderr: $stderr)
+                     contract_factory: nil, stderr: $stderr, after_turn: nil)
         @conn = conn
         @supervisor = supervisor
         @publisher = publisher
@@ -64,7 +65,13 @@ module Kquest
         @watcher = watcher
         @contract_factory = contract_factory || ->(args) { PhaseContract.new(**args) }
         @stderr = stderr
+        @after_turn = after_turn
       end
+
+      # The briefing exchange's per-turn callable (the quest worker wires its
+      # own periodic passes at boot — the per-turn SSE seam, Grounds §4.4);
+      # consumed when the briefing executor is first built.
+      attr_writer :after_turn
 
       # ── the runner loop (the quest worker's per-iteration call) ─────────
 
@@ -75,6 +82,15 @@ module Kquest
       def run_next(quest_id)
         quest = load_quest(quest_id)
         return :not_active unless quest && quest.fetch(:state) == "active"
+
+        # The §8 amendment's FIRST branch (AC12): an open operator session
+        # owns the write gate — serve its queue (one exchange per enqueued
+        # turn) or hold idle; the pending-phase path runs only when no
+        # operator session is open. Operator sessions are held BY THEIR ROW
+        # (Grounds §4.1) — sign-off is the only end.
+        if (session = open_operator_session(quest))
+          return serve_briefing(quest, session)
+        end
 
         phase = latest_phase(quest_id)
         if phase.nil?
@@ -87,6 +103,8 @@ module Kquest
 
         case phase.fetch(:state)
         when "pending", "running"
+          return :awaiting_briefing if never_started_briefing?(phase, quest)
+
           run_phase_attempt(phase, quest)
         when "complete"
           evaluate_transition(quest: quest, phase: phase, event: "phase_complete",
@@ -97,6 +115,61 @@ module Kquest
           # escalation at the boundary.
           run_phase_attempt(phase, quest)
         end
+      end
+
+      # ── the briefing serve (I18 the §8 amendment) ────────────────────────
+
+      # One runner step over an OPEN operator session: consume the oldest
+      # enqueued turn and run the exchange (:briefing_ran), or hold idle
+      # (:briefing_hold — the worker stays up; the operator may type). The
+      # engine's own loud errors ride through the exchange; the catch here is
+      # the run_phase_attempt precedent — loud on stderr, the queue row stays
+      # `consumed`, the worker stays up (PHASE 0 note 2).
+      def serve_briefing(quest, session)
+        row = briefing_executor.consume_next!(quest: quest, session: session)
+        return :briefing_hold unless row
+
+        begin
+          briefing_executor.exchange!(quest: quest, session: session, row: row)
+        rescue Kquest::Engine::Error => e
+          @stderr.puts "BRIEFING_EXCHANGE_FAILED: session #{session.fetch(:id)} — " \
+                       "#{e.message[0, 300]}"
+        end
+        :briefing_ran
+      end
+
+      # The briefing executor — built from THIS runner's loop components (the
+      # supervisor/registry/watcher/publisher the hosting worker wired in);
+      # carries the per-turn `after_turn` callable the worker set at boot.
+      def briefing_executor
+        @briefing_executor ||= Kquest::Orchestrator::BriefingExecutor.new(
+          conn: @conn, supervisor: @supervisor, registry: @registry, watcher: @watcher,
+          publisher: @publisher, after_turn: @after_turn
+        )
+      end
+
+      # The open operator session (the OperatorWrite.current_session row
+      # shape read directly — the runner must not depend on the UI tree):
+      # `driver='operator'`, `ended_at IS NULL`, latest by started_at/id.
+      def open_operator_session(quest)
+        @conn[:sessions].where(quest_id: quest.fetch(:id), driver: "operator", ended_at: nil)
+                        .order(Sequel.desc(:started_at), Sequel.desc(:id)).first
+      end
+
+      # The never-started rule (Grounds §4.2/§5.4): the LATEST phase is the
+      # decompose round-1 row, still pending, never started, with no staged
+      # agenda (and no open operator session — this case runs after that
+      # branch) → the quest waits honestly for its briefing (`:awaiting_
+      # briefing`; the launcher re-spawns on cadence). With agenda staged the
+      # existing autonomy path runs UNCHANGED (the hand-off).
+      def never_started_briefing?(phase, quest)
+        return false unless phase.fetch(:kind) == "decompose" && phase.fetch(:round_no) == 1
+        return false unless phase.fetch(:state) == "pending" && phase.fetch(:started_at).nil?
+
+        values = GuardValues.new(conn: @conn, quest: quest, phase: phase,
+                                 config: read_config(quest), session_id: nil,
+                                 transcript_bytes: nil, watcher: @watcher)
+        !values.value("agenda_staged")
       end
 
       # ── the phase attempt ────────────────────────────────────────────────
@@ -957,7 +1030,7 @@ module Kquest
 
       def web_calls_used
         @conn[:tool_calls].where(quest_id: @quest.fetch(:id), ok: true)
-                          .where(Sequel[:tool] => %w[web_search web_fetch]).count
+                          .where(Sequel[:tool] => %w[web_search web_fetch agenda_stage]).count
       end
 
       def tokens_used

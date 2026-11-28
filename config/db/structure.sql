@@ -35,6 +35,26 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: briefing_turns; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.briefing_turns (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    quest_id uuid NOT NULL,
+    session_id uuid NOT NULL,
+    seq integer NOT NULL,
+    body text NOT NULL,
+    state text DEFAULT 'enqueued'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    consumed_at timestamp with time zone,
+    CONSTRAINT ck_briefing_turns_body_nonempty CHECK ((char_length(btrim(body)) > 0)),
+    CONSTRAINT ck_briefing_turns_seq_positive CHECK ((seq >= 1)),
+    CONSTRAINT ck_briefing_turns_state CHECK ((state = ANY (ARRAY['enqueued'::text, 'consumed'::text, 'skipped'::text])))
+);
+
+
+--
 -- Name: cap_records; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1452,6 +1472,14 @@ CREATE TABLE public.workspaces (
 
 
 --
+-- Name: briefing_turns briefing_turns_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.briefing_turns
+    ADD CONSTRAINT briefing_turns_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: cap_records cap_records_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1721,6 +1749,14 @@ ALTER TABLE ONLY public.tool_calls
 
 ALTER TABLE ONLY public.tool_config
     ADD CONSTRAINT tool_config_pkey PRIMARY KEY (key);
+
+
+--
+-- Name: briefing_turns uq_briefing_turns_session_seq; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.briefing_turns
+    ADD CONSTRAINT uq_briefing_turns_session_seq UNIQUE (session_id, seq);
 
 
 --
@@ -2148,6 +2184,13 @@ ALTER TABLE ONLY public.workspaces
 
 
 --
+-- Name: idx_briefing_turns_session_state; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_briefing_turns_session_state ON public.briefing_turns USING btree (session_id, state, seq);
+
+
+--
 -- Name: idx_cap_records_user_surface; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2418,6 +2461,30 @@ CREATE UNIQUE INDEX uq_quest_lifecycle_archive_once ON public.quest_lifecycle_ev
 --
 
 CREATE UNIQUE INDEX uq_report_versions_one_standing ON public.report_versions USING btree (quest_id) WHERE standing;
+
+
+--
+-- Name: briefing_turns briefing_turns_quest_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.briefing_turns
+    ADD CONSTRAINT briefing_turns_quest_id_fkey FOREIGN KEY (quest_id) REFERENCES public.quests(id) ON DELETE CASCADE;
+
+
+--
+-- Name: briefing_turns briefing_turns_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.briefing_turns
+    ADD CONSTRAINT briefing_turns_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.sessions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: briefing_turns briefing_turns_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.briefing_turns
+    ADD CONSTRAINT briefing_turns_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -3016,4 +3083,5 @@ INSERT INTO schema_migrations (filename) VALUES
 ('20261124000008_add_engine_config_i04.rb'),
 ('20261124000009_add_tool_config_i05.rb'),
 ('20261124000010_add_tripwire_views_i07.rb'),
-('20261124000011_add_cap_records.rb');
+('20261124000011_add_cap_records.rb'),
+('20261125000001_add_briefing_turns.rb');

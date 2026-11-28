@@ -3,6 +3,7 @@
 require "json"
 require "securerandom"
 require "socket"
+require "time"
 
 module Kquest
   module Orchestrator

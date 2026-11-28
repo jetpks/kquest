@@ -16,6 +16,21 @@ module Kquest
 
     JSON_CONTENT_TYPE = "application/json; charset=utf-8"
 
+    CSRF_REJECTION_TEXT = "CSRF token rejected: the form's security token is missing, " \
+                          "stale, or does not match this session — reload the page and " \
+                          "resubmit; no changes were made"
+
+    # The graceful CSRF rejection (I18/I19 queued; hanami-action's default
+    # raises its CSRF error class → a 500 the receipts observed): render the
+    # teaching 403 and HALT — the action's handle never runs on a rejected
+    # token. The session is deliberately NOT cleared (the default's
+    # res.session.clear): a stale-token retry must not log the operator out;
+    # the check itself is absolute — nothing lands.
+    def handle_invalid_csrf_token(req, res)
+      res.content_type = JSON_CONTENT_TYPE
+      halt 403, JSON.generate(error: CSRF_REJECTION_TEXT)
+    end
+
     # Session-only lookup. Takes req explicitly; safe when actions are singleton
     # objects (no per-request instance state).
     def current_user(req)
